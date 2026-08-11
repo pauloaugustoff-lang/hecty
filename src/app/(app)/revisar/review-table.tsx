@@ -12,17 +12,19 @@ import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Layers, ArrowLeftRight, Sparkles } from "lucide-react";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Layers, ArrowLeftRight, Sparkles, CreditCard } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { BulkClassifyDialog } from "./bulk-classify-dialog";
-import { markAsTransferAction, applyRulesToUnclassifiedAction } from "./actions";
+import { markAsTransferAction, markAsCardPaymentAction, applyRulesToUnclassifiedAction } from "./actions";
 
 export function ReviewTable({
   spaceId,
   userId,
   transactions,
   categories,
+  cards,
 }: {
   spaceId: string;
   userId: string;
@@ -32,6 +34,7 @@ export function ReviewTable({
   cards: CardRow[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [cardPaymentCardId, setCardPaymentCardId] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const groups = useMemo(() => {
@@ -78,6 +81,20 @@ export function ReviewTable({
     });
   }
 
+  function handleMarkCardPayment() {
+    if (selected.size !== 1 || !cardPaymentCardId) return;
+    const [transactionId] = Array.from(selected);
+    startTransition(async () => {
+      const result = await markAsCardPaymentAction(spaceId, { transactionId, cardId: cardPaymentCardId });
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success("Marcado como pagamento de fatura");
+        setSelected(new Set());
+        setCardPaymentCardId("");
+      }
+    });
+  }
+
   function handleApplyRules() {
     startTransition(async () => {
       const result = await applyRulesToUnclassifiedAction(spaceId);
@@ -102,6 +119,28 @@ export function ReviewTable({
             <Button variant="secondary" size="sm" onClick={handleMarkTransfer} disabled={isPending}>
               <ArrowLeftRight className="h-3.5 w-3.5" /> Marcar como transferência
             </Button>
+          ) : null}
+          {selected.size === 1 && cards.length > 0 ? (
+            <div className="flex items-center gap-1.5">
+              <Select value={cardPaymentCardId || "choose"} onValueChange={(v) => setCardPaymentCardId(v === "choose" ? "" : v)}>
+                <SelectTrigger className="h-8 w-40 text-[13px]">
+                  <SelectValue placeholder="Qual cartão?" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="choose" disabled>
+                    Qual cartão?
+                  </SelectItem>
+                  {cards.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="secondary" size="sm" onClick={handleMarkCardPayment} disabled={isPending || !cardPaymentCardId}>
+                <CreditCard className="h-3.5 w-3.5" /> Marcar como pagamento de fatura
+              </Button>
+            </div>
           ) : null}
           {selected.size > 0 ? (
             <BulkClassifyDialog

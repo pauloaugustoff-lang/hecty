@@ -45,7 +45,7 @@ export default async function CategoriasPage() {
                         {category.is_archived ? <span className="text-[11px] text-text-tertiary">arquivada</span> : null}
                       </div>
                       <div className="flex items-center gap-1">
-                        {!category.is_system ? <CategoryFormDialog spaceId={space.id} category={category} /> : null}
+                        <CategoryFormDialog spaceId={space.id} category={category} />
                         <CategoryFormDialog spaceId={space.id} parent={category} />
                         <ArchiveCategoryButton categoryId={category.id} isArchived={category.is_archived} />
                       </div>
@@ -60,7 +60,7 @@ export default async function CategoriasPage() {
                               {sub.is_archived ? <span className="text-[11px] text-text-tertiary">arquivada</span> : null}
                             </div>
                             <div className="flex items-center gap-1">
-                              {!sub.is_system ? <CategoryFormDialog spaceId={space.id} category={sub} /> : null}
+                              <CategoryFormDialog spaceId={space.id} category={sub} />
                               <ArchiveCategoryButton categoryId={sub.id} isArchived={sub.is_archived} />
                             </div>
                           </div>
