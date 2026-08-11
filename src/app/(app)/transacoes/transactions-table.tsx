@@ -146,6 +146,11 @@ export function TransactionsTable({
                 </Td>
                 <Td className="whitespace-nowrap text-text-secondary tabular text-[13px]">
                   {format(new Date(`${tx.movement_date}T00:00:00`), "dd/MM/yyyy", { locale: ptBR })}
+                  {tx.competence_date !== tx.movement_date ? (
+                    <span className="block text-[11px] text-text-tertiary">
+                      sai {format(new Date(`${tx.competence_date}T00:00:00`), "dd/MM", { locale: ptBR })}
+                    </span>
+                  ) : null}
                 </Td>
                 <Td>
                   <TransactionFormDialog

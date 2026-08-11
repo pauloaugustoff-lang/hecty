@@ -11,6 +11,8 @@ import type { CategoryRow } from "@/lib/data/categories";
 import type { TransactionNature, TransactionDirection } from "@/lib/supabase/types";
 import { natureLabels } from "@/lib/domain/labels";
 import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
+import { getStatementPeriod } from "@/lib/transactions/cards";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -76,6 +78,11 @@ export function TransactionFormDialog({
   const [amountInput, setAmountInput] = useState(
     transaction ? formatCentsToBRL(transaction.amount_cents).replace("R$", "").trim() : "",
   );
+  const [movementDate, setMovementDate] = useState(transaction?.movement_date ?? new Date().toISOString().slice(0, 10));
+  const [competenceDate, setCompetenceDate] = useState(transaction?.competence_date ?? "");
+  // Ao editar, respeita o valor já persistido em vez de recalcular e
+  // sobrescrever silenciosamente assim que o diálogo abre.
+  const [competenceDateTouched, setCompetenceDateTouched] = useState(Boolean(transaction));
 
   const isRedemption = nature === "resgate_investimento" || nature === "resgate_a_decompor";
   const parentCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
@@ -83,6 +90,22 @@ export function TransactionFormDialog({
     () => categories.filter((c) => c.parent_id === categoryId),
     [categories, categoryId],
   );
+
+  const [accountId, cardId] = source.startsWith("account:")
+    ? [source.slice(8), ""]
+    : source.startsWith("card:")
+      ? ["", source.slice(5)]
+      : ["", ""];
+  const selectedCard = cards.find((c) => c.id === cardId);
+
+  // Compra no cartão: sugere automaticamente a data de vencimento da fatura
+  // (quando o dinheiro sai da conta) a partir do ciclo do cartão. O usuário
+  // pode sobrescrever; uma vez editado manualmente, para de recalcular.
+  useEffect(() => {
+    if (!selectedCard || !movementDate || competenceDateTouched) return;
+    const dueDate = getStatementPeriod(selectedCard.closing_day, selectedCard.due_day, new Date(`${movementDate}T00:00:00`)).dueDate;
+    setCompetenceDate(format(dueDate, "yyyy-MM-dd"));
+  }, [selectedCard, movementDate, competenceDateTouched]);
 
   useEffect(() => {
     if (state.success) {
@@ -97,12 +120,6 @@ export function TransactionFormDialog({
   } catch {
     amountCents = 0;
   }
-
-  const [accountId, cardId] = source.startsWith("account:")
-    ? [source.slice(8), ""]
-    : source.startsWith("card:")
-      ? ["", source.slice(5)]
-      : ["", ""];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -170,13 +187,14 @@ export function TransactionFormDialog({
               <Input id="amount" inputMode="decimal" required value={amountInput} onChange={(e) => setAmountInput(e.target.value)} placeholder="0,00" />
             </div>
             <div>
-              <Label htmlFor="movementDate">Data</Label>
+              <Label htmlFor="movementDate">{selectedCard ? "Data da compra" : "Data"}</Label>
               <Input
                 id="movementDate"
                 name="movementDate"
                 type="date"
                 required
-                defaultValue={transaction?.movement_date ?? new Date().toISOString().slice(0, 10)}
+                value={movementDate}
+                onChange={(e) => setMovementDate(e.target.value)}
               />
             </div>
             <div className="col-span-2">
@@ -201,6 +219,25 @@ export function TransactionFormDialog({
                 </SelectContent>
               </Select>
             </div>
+            {selectedCard ? (
+              <div className="col-span-2">
+                <Label htmlFor="competenceDate">Data que sai da conta (vencimento da fatura)</Label>
+                <Input
+                  id="competenceDate"
+                  name="competenceDate"
+                  type="date"
+                  required
+                  value={competenceDate}
+                  onChange={(e) => {
+                    setCompetenceDate(e.target.value);
+                    setCompetenceDateTouched(true);
+                  }}
+                />
+                <p className="mt-1 text-[11px] text-text-tertiary">
+                  Calculada a partir do ciclo do cartão — conta como despesa neste mês, não no mês da compra.
+                </p>
+              </div>
+            ) : null}
             <div className="col-span-2">
               <Label htmlFor="nature">Natureza</Label>
               <Select value={nature} onValueChange={(v) => setNature(v as TransactionNature)}>

@@ -44,10 +44,15 @@ export function computeDashboardMetrics(transactions: DashboardTransactionInput[
   let resgatesPendentesDecomposicao = 0;
 
   for (const tx of transactions) {
-    if (tx.direction === "entrada") {
-      entradasCaixaCents += tx.amountCents;
-    } else {
-      saidasCaixaCents += tx.amountCents;
+    // Pagamento de fatura não é uma segunda saída de caixa: o dinheiro já foi
+    // contado quando cada compra no cartão foi atribuída ao mês do vencimento
+    // da fatura (ver competence_date). Contar aqui duplicaria a mesma saída.
+    if (tx.nature !== "pagamento_cartao") {
+      if (tx.direction === "entrada") {
+        entradasCaixaCents += tx.amountCents;
+      } else {
+        saidasCaixaCents += tx.amountCents;
+      }
     }
 
     if (tx.classificationStatus !== "classificado") {

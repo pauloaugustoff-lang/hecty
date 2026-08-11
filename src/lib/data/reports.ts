@@ -16,28 +16,28 @@ export async function getRecurringExpenses(spaceId: string, monthsBack = 6): Pro
 
   const { data, error } = await supabase
     .from("transactions")
-    .select("normalized_description, original_description, amount_cents, movement_date")
+    .select("normalized_description, original_description, amount_cents, competence_date")
     .eq("space_id", spaceId)
     .eq("nature", "despesa")
     .eq("direction", "saida")
     .is("deleted_at", null)
-    .gte("movement_date", from);
+    .gte("competence_date", from);
 
   if (error) throw error;
 
   const byDescription = new Map<string, { months: Set<string>; amounts: number[]; sample: string; last: { date: string; amount: number } }>();
 
   for (const tx of data ?? []) {
-    const monthKey = tx.movement_date.slice(0, 7);
+    const monthKey = tx.competence_date.slice(0, 7);
     const entry = byDescription.get(tx.normalized_description) ?? {
       months: new Set<string>(),
       amounts: [],
       sample: tx.original_description,
-      last: { date: tx.movement_date, amount: tx.amount_cents },
+      last: { date: tx.competence_date, amount: tx.amount_cents },
     };
     entry.months.add(monthKey);
     entry.amounts.push(tx.amount_cents);
-    if (tx.movement_date >= entry.last.date) entry.last = { date: tx.movement_date, amount: tx.amount_cents };
+    if (tx.competence_date >= entry.last.date) entry.last = { date: tx.competence_date, amount: tx.amount_cents };
     byDescription.set(tx.normalized_description, entry);
   }
 

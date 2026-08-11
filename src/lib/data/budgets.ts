@@ -27,8 +27,8 @@ export async function getActualSpendByCategory(
     .eq("nature", "despesa")
     .eq("direction", "saida")
     .is("deleted_at", null)
-    .gte("movement_date", from)
-    .lte("movement_date", to);
+    .gte("competence_date", from)
+    .lte("competence_date", to);
 
   if (error) throw error;
 

@@ -12,6 +12,8 @@ import { suggestMapping, normalizeTableRows, normalizeOfxRows, type ColumnMappin
 import { computeDedupHash, checkDuplicate } from "@/lib/import/dedup";
 import { findMatchingRule, actionFromRule } from "@/lib/rules/engine";
 import { toRuleDefinition } from "@/lib/data/rules";
+import { getStatementPeriod } from "@/lib/transactions/cards";
+import { format } from "date-fns";
 import type { ImportRowStatus, ImportSourceType, TransactionDirection } from "@/lib/supabase/types";
 
 export interface AnalyzeResult {
@@ -160,6 +162,22 @@ export async function stageImportBatchAction(spaceId: string, input: StageInput)
   const { data: rules } = await supabase.from("rules").select("*").eq("space_id", spaceId).eq("is_active", true).order("priority");
   const ruleDefs = (rules ?? []).map(toRuleDefinition);
 
+  // Compras importadas para um cartão contam como despesa no mês do
+  // vencimento da fatura (quando o dinheiro sai da conta), não no mês da
+  // compra. Para importação em conta, competence_date = movement_date.
+  let cardCycle: { closingDay: number; dueDay: number } | null = null;
+  if (input.cardId) {
+    const { data: card } = await supabase.from("cards").select("closing_day, due_day").eq("id", input.cardId).maybeSingle();
+    if (card) cardCycle = { closingDay: card.closing_day, dueDay: card.due_day };
+  }
+
+  function competenceDateFor(movementDate: string | null): string | null {
+    if (!movementDate) return movementDate;
+    if (!cardCycle) return movementDate;
+    const dueDate = getStatementPeriod(cardCycle.closingDay, cardCycle.dueDay, new Date(`${movementDate}T00:00:00`)).dueDate;
+    return format(dueDate, "yyyy-MM-dd");
+  }
+
   const rows = candidates.map((c) => {
     const dedupHash = c.movementDate && c.amountCents !== null && c.direction
       ? computeDedupHash({
@@ -195,7 +213,7 @@ export async function stageImportBatchAction(spaceId: string, input: StageInput)
       row_index: c.rowIndex,
       raw_data: { ...c } as Record<string, unknown>,
       movement_date: c.movementDate,
-      competence_date: c.movementDate,
+      competence_date: competenceDateFor(c.movementDate),
       original_description: c.originalDescription,
       normalized_description: c.normalizedDescription,
       amount_cents: c.amountCents,

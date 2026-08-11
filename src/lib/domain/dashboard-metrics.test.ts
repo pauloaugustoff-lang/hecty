@@ -61,13 +61,14 @@ describe("computeDashboardMetrics", () => {
     expect(metrics.saidasCaixaCents).toBe(50_000_00);
   });
 
-  it("pagamento de fatura de cartão não duplica a despesa das compras", () => {
+  it("pagamento de fatura de cartão não duplica a despesa nem a saída de caixa das compras", () => {
     const metrics = computeDashboardMetrics([
       tx({ amountCents: 20_000, direction: "saida", nature: "despesa" }), // compra no cartão
       tx({ amountCents: 20_000, direction: "saida", nature: "pagamento_cartao" }), // pagamento da fatura
     ]);
 
     expect(metrics.despesasCents).toBe(20_000);
+    expect(metrics.saidasCaixaCents).toBe(20_000);
   });
 
   it("resultado econômico é receita efetiva menos despesa", () => {

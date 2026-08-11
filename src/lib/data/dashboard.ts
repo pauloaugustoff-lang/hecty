@@ -9,6 +9,7 @@ interface RawTx {
   nature: DashboardTransactionInput["nature"];
   classification_status: DashboardTransactionInput["classificationStatus"];
   movement_date: string;
+  competence_date: string;
   category_id: string | null;
   category: { name: string; color: string } | null;
   subcategory_id: string | null;
@@ -25,17 +26,22 @@ interface RawTx {
   } | null;
 }
 
+// Filtra e agrupa por competence_date, não movement_date: uma compra no
+// cartão conta como despesa/saída de caixa no mês em que a fatura vence
+// (é quando o dinheiro efetivamente sai da conta), não no mês da compra.
+// Para qualquer lançamento não ligado a cartão, competence_date é sempre
+// igual a movement_date, então o comportamento não muda.
 async function fetchTransactions(spaceId: string, from: string, to: string): Promise<RawTx[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("transactions")
     .select(
-      "amount_cents, direction, nature, classification_status, movement_date, category_id, category:categories!transactions_category_id_fkey(name, color), subcategory_id, subcategory:categories!transactions_subcategory_id_fkey(name, color), redemption_details(*)",
+      "amount_cents, direction, nature, classification_status, movement_date, competence_date, category_id, category:categories!transactions_category_id_fkey(name, color), subcategory_id, subcategory:categories!transactions_subcategory_id_fkey(name, color), redemption_details(*)",
     )
     .eq("space_id", spaceId)
     .is("deleted_at", null)
-    .gte("movement_date", from)
-    .lte("movement_date", to);
+    .gte("competence_date", from)
+    .lte("competence_date", to);
 
   if (error) throw error;
   return (data as unknown as RawTx[]) ?? [];
@@ -89,7 +95,7 @@ export async function getMonthlySeries(spaceId: string, monthsBack = 6): Promise
   }
 
   for (const row of rows) {
-    const key = row.movement_date.slice(0, 7);
+    const key = row.competence_date.slice(0, 7);
     const bucket = buckets.get(key);
     if (!bucket) continue;
 
