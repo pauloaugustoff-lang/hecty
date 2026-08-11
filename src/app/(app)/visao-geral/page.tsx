@@ -18,7 +18,9 @@ export default async function VisaoGeralPage({
   const { mes } = await searchParams;
   const space = await requireCurrentSpace();
 
-  const month = mes ? new Date(`${mes}-01T00:00:00`) : new Date();
+  const monthParam = mes ?? format(new Date(), "yyyy-MM");
+  const [monthYear, monthNum] = monthParam.split("-").map(Number);
+  const month = new Date(monthYear, monthNum - 1, 1);
   const from = format(startOfMonth(month), "yyyy-MM-dd");
   const to = format(endOfMonth(month), "yyyy-MM-dd");
 
@@ -58,7 +60,7 @@ export default async function VisaoGeralPage({
         description="Resumo do espaço financeiro no período selecionado."
         actions={
           <Suspense>
-            <PeriodFilter month={month} />
+            <PeriodFilter month={monthParam} />
           </Suspense>
         }
       />

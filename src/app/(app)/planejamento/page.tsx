@@ -14,7 +14,9 @@ import { endOfMonth, format, startOfMonth } from "date-fns";
 export default async function PlanejamentoPage({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
   const { mes } = await searchParams;
   const space = await requireCurrentSpace();
-  const month = mes ? new Date(`${mes}-01T00:00:00`) : new Date();
+  const monthParam = mes ?? format(new Date(), "yyyy-MM");
+  const [monthYear, monthNum] = monthParam.split("-").map(Number);
+  const month = new Date(monthYear, monthNum - 1, 1);
   const referenceMonth = format(startOfMonth(month), "yyyy-MM-dd");
   const from = referenceMonth;
   const to = format(endOfMonth(month), "yyyy-MM-dd");
@@ -38,7 +40,7 @@ export default async function PlanejamentoPage({ searchParams }: { searchParams:
         description="Defina um valor planejado por categoria e acompanhe o quanto já foi gasto no mês."
         actions={
           <Suspense>
-            <MonthFilter month={month} />
+            <MonthFilter month={monthParam} />
           </Suspense>
         }
       />
