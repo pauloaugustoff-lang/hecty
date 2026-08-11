@@ -7,6 +7,7 @@ import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { ColumnMapping } from "@/lib/import/pipeline";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Callout } from "@/components/ui/callout";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup } from "@/components/ui/select";
@@ -26,6 +27,7 @@ export function ImportWizard({ spaceId, accounts, cards }: { spaceId: string; ac
   const [file, setFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null);
   const [mapping, setMapping] = useState<Partial<ColumnMapping>>({});
+  const [statementPaymentDate, setStatementPaymentDate] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [accountId, cardId] = source.startsWith("account:")
@@ -64,6 +66,12 @@ export function ImportWizard({ spaceId, accounts, cards }: { spaceId: string; ac
       }
     }
 
+    if (cardId && !statementPaymentDate) {
+      setError("Informe a data de vencimento/pagamento desta fatura.");
+      return;
+    }
+
+    setError(null);
     startTransition(async () => {
       await stageImportBatchAction(spaceId, {
         storagePath: analysis.storagePath!,
@@ -71,6 +79,7 @@ export function ImportWizard({ spaceId, accounts, cards }: { spaceId: string; ac
         fileName: analysis.fileName!,
         accountId,
         cardId,
+        statementPaymentDate: cardId ? statementPaymentDate : undefined,
         mapping: analysis.needsMapping ? (mapping as ColumnMapping) : undefined,
       });
     });
@@ -134,6 +143,24 @@ export function ImportWizard({ spaceId, accounts, cards }: { spaceId: string; ac
             {analysis.fileName} · {analysis.totalRows} linha(s) encontrada(s)
           </div>
 
+          {cardId ? (
+            <div className="rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-3.5">
+              <Label htmlFor="statementPaymentDate">Data de vencimento/pagamento desta fatura</Label>
+              <Input
+                id="statementPaymentDate"
+                type="date"
+                required
+                value={statementPaymentDate}
+                onChange={(e) => setStatementPaymentDate(e.target.value)}
+                className="max-w-48"
+              />
+              <p className="mt-1.5 text-[11px] text-text-tertiary">
+                Esse arquivo é de uma fatura só, então todas as compras nele — mesmo parcelas de compras antigas —
+                contam como despesa no mês dessa data, não no mês em que cada compra foi feita.
+              </p>
+            </div>
+          ) : null}
+
           {analysis.needsMapping ? (
             <>
               <p className="text-sm text-text-secondary">Confirme quais colunas do arquivo correspondem a cada campo:</p>
@@ -194,7 +221,7 @@ export function ImportWizard({ spaceId, accounts, cards }: { spaceId: string; ac
             <Button variant="ghost" onClick={() => { setAnalysis(null); setFile(null); }}>
               Voltar
             </Button>
-            <Button variant="primary" onClick={handleStage} disabled={isPending}>
+            <Button variant="primary" onClick={handleStage} disabled={isPending || (Boolean(cardId) && !statementPaymentDate)}>
               {isPending ? "Processando…" : "Continuar para revisão"} <ArrowRight className="h-4 w-4" />
             </Button>
           </div>

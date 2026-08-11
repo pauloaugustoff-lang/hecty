@@ -12,8 +12,6 @@ import { suggestMapping, normalizeTableRows, normalizeOfxRows, type ColumnMappin
 import { computeDedupHash, checkDuplicate } from "@/lib/import/dedup";
 import { findMatchingRule, actionFromRule } from "@/lib/rules/engine";
 import { toRuleDefinition } from "@/lib/data/rules";
-import { getStatementPeriod } from "@/lib/transactions/cards";
-import { format } from "date-fns";
 import type { ImportRowStatus, ImportSourceType, TransactionDirection } from "@/lib/supabase/types";
 
 export interface AnalyzeResult {
@@ -102,6 +100,11 @@ export interface StageInput {
   fileName: string;
   accountId: string | null;
   cardId: string | null;
+  /** Obrigatório quando cardId está definido: data de vencimento/pagamento
+   * desta fatura, aplicada a todas as linhas do lote. Não dá pra inferir
+   * isso a partir da data de cada compra porque compras parceladas aparecem
+   * em faturas de meses diferentes da compra original. */
+  statementPaymentDate?: string;
   mapping?: ColumnMapping;
 }
 
@@ -164,18 +167,15 @@ export async function stageImportBatchAction(spaceId: string, input: StageInput)
 
   // Compras importadas para um cartão contam como despesa no mês do
   // vencimento da fatura (quando o dinheiro sai da conta), não no mês da
-  // compra. Para importação em conta, competence_date = movement_date.
-  let cardCycle: { closingDay: number; dueDay: number } | null = null;
-  if (input.cardId) {
-    const { data: card } = await supabase.from("cards").select("closing_day, due_day").eq("id", input.cardId).maybeSingle();
-    if (card) cardCycle = { closingDay: card.closing_day, dueDay: card.due_day };
-  }
-
+  // compra. Isso não dá pra inferir da data de cada compra, porque uma
+  // parcela pode ter sido comprada em janeiro e só aparecer na fatura de
+  // julho — por isso é uma única data por lote, informada pelo usuário
+  // (todo o arquivo importado é de UMA fatura). Para importação em conta,
+  // competence_date = movement_date, como antes.
   function competenceDateFor(movementDate: string | null): string | null {
     if (!movementDate) return movementDate;
-    if (!cardCycle) return movementDate;
-    const dueDate = getStatementPeriod(cardCycle.closingDay, cardCycle.dueDay, new Date(`${movementDate}T00:00:00`)).dueDate;
-    return format(dueDate, "yyyy-MM-dd");
+    if (input.cardId && input.statementPaymentDate) return input.statementPaymentDate;
+    return movementDate;
   }
 
   const rows = candidates.map((c) => {
