@@ -1,0 +1,270 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ==========================================================================
+   Design tokens — Hecty
+   Identidade institucional, patrimonial e precisa: azul-marinho como cor
+   estrutural, azul de interação para ações, verde reservado exclusivamente
+   para sinalizar rendimento/resultado positivo (nunca decorativo). Títulos
+   e números importantes em Sora; interface e tabelas em Inter, sempre com
+   algarismos tabulares para alinhar colunas de valores.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* Paleta oficial ------------------------------------------------------ */
+  --navy: #0b1d3a;
+  --blue: #1e4db7;
+  --emerald: #109b7e;
+  --bg-soft: #e6f0f2;
+  --bg-main: #fafaf8;
+  --graphite: #1f2937;
+
+  /* Superfícies ----------------------------------------------------------- */
+  --surface: var(--bg-main);
+  --surface-raised: #ffffff;
+  --surface-sunken: var(--bg-soft);
+  --surface-overlay: #ffffff;
+
+  /* Bordas ----------------------------------------------------------------- */
+  --border-subtle: #e7e9ec;
+  --border: #d7dbe1;
+  --border-strong: #b9c0ca;
+
+  /* Texto -------------------------------------------------------------- */
+  --text-primary: var(--navy);
+  --text-secondary: var(--graphite);
+  --text-tertiary: #6b7280;
+  --text-inverse: var(--bg-main);
+  --text-on-accent: #ffffff;
+
+  /* Marca / ação ------------------------------------------------------- */
+  --accent: var(--blue);
+  --accent-strong: #163c8c;
+  --accent-soft: var(--bg-soft);
+  --focus-ring: var(--blue);
+
+  /* Estados semânticos financeiros — o verde é exclusivo de rendimento/
+     resultado positivo, nunca reaproveitado como cor genérica. */
+  --positive: var(--emerald);
+  --positive-soft: #e1f3ee;
+  --negative: #c0392b;
+  --negative-soft: #fbe9e7;
+  --pending: #b7791f;
+  --pending-soft: #faf0dc;
+  --transfer: #5b6472;
+  --transfer-soft: #e9eaec;
+
+  /* Gráficos -------------------------------------------------------------- */
+  --chart-1: var(--blue);
+  --chart-2: var(--emerald);
+  --chart-3: var(--navy);
+  --chart-4: #c0392b;
+  --chart-5: #b7791f;
+  --chart-6: #5b6472;
+  --chart-grid: var(--border-subtle);
+
+  /* Forma -------------------------------------------------------------- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Sombra — discreta, tingida de navy em vez de preto puro */
+  --shadow-sm: 0 1px 2px rgba(11, 29, 58, 0.06);
+  --shadow-md: 0 4px 16px -4px rgba(11, 29, 58, 0.14);
+  --shadow-overlay: 0 12px 40px -8px rgba(11, 29, 58, 0.28);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface: #081527;
+  --surface-raised: #0e2140;
+  --surface-sunken: #061020;
+  --surface-overlay: #122a4d;
+
+  --border-subtle: #17284a;
+  --border: #223a63;
+  --border-strong: #345080;
+
+  --text-primary: #f5f6f8;
+  --text-secondary: #c7ceda;
+  --text-tertiary: #8996ac;
+  --text-inverse: var(--navy);
+  --text-on-accent: #ffffff;
+
+  --accent: #5b8def;
+  --accent-strong: #8ab0f5;
+  --accent-soft: #16294d;
+  --focus-ring: #5b8def;
+
+  --positive: #34c79b;
+  --positive-soft: #10352c;
+  --negative: #e0796a;
+  --negative-soft: #3a1e1a;
+  --pending: #e0a83f;
+  --pending-soft: #3a2c12;
+  --transfer: #9aa8bf;
+  --transfer-soft: #1b2740;
+
+  --chart-1: #5b8def;
+  --chart-2: #34c79b;
+  --chart-3: #9aa8bf;
+  --chart-4: #e0796a;
+  --chart-5: #e0a83f;
+  --chart-6: #8ea0c2;
+  --chart-grid: var(--border-subtle);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 4px 20px -4px rgba(0, 0, 0, 0.48);
+  --shadow-overlay: 0 16px 48px -8px rgba(0, 0, 0, 0.6);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --surface: #081527;
+    --surface-raised: #0e2140;
+    --surface-sunken: #061020;
+    --surface-overlay: #122a4d;
+
+    --border-subtle: #17284a;
+    --border: #223a63;
+    --border-strong: #345080;
+
+    --text-primary: #f5f6f8;
+    --text-secondary: #c7ceda;
+    --text-tertiary: #8996ac;
+    --text-inverse: var(--navy);
+    --text-on-accent: #ffffff;
+
+    --accent: #5b8def;
+    --accent-strong: #8ab0f5;
+    --accent-soft: #16294d;
+    --focus-ring: #5b8def;
+
+    --positive: #34c79b;
+    --positive-soft: #10352c;
+    --negative: #e0796a;
+    --negative-soft: #3a1e1a;
+    --pending: #e0a83f;
+    --pending-soft: #3a2c12;
+    --transfer: #9aa8bf;
+    --transfer-soft: #1b2740;
+
+    --chart-1: #5b8def;
+    --chart-2: #34c79b;
+    --chart-3: #9aa8bf;
+    --chart-4: #e0796a;
+    --chart-5: #e0a83f;
+    --chart-6: #8ea0c2;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.32);
+    --shadow-md: 0 4px 20px -4px rgba(0, 0, 0, 0.48);
+    --shadow-overlay: 0 16px 48px -8px rgba(0, 0, 0, 0.6);
+  }
+
+  :root:not([data-theme="light"]) .logo-for-light {
+    display: none;
+  }
+
+  :root:not([data-theme="light"]) .logo-for-dark {
+    display: block;
+  }
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-overlay: var(--surface-overlay);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-inverse: var(--text-inverse);
+  --color-text-on-accent: var(--text-on-accent);
+
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-negative: var(--negative);
+  --color-negative-soft: var(--negative-soft);
+  --color-pending: var(--pending);
+  --color-pending-soft: var(--pending-soft);
+  --color-transfer: var(--transfer);
+  --color-transfer-soft: var(--transfer-soft);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+
+  --font-display: var(--font-sora);
+  --font-sans: var(--font-inter);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    height: 100%;
+  }
+
+  body {
+    background: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--text-primary);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Algarismos tabulares para alinhar colunas de valores financeiros em
+     tabelas, relatórios e indicadores — sem trocar a família da fonte. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* Troca de logotipo conforme o tema — mesma estratégia dos tokens de
+     cor acima (data-theme explícito, com fallback para prefers-color-scheme). */
+  .logo-for-light { display: block; }
+  .logo-for-dark { display: none; }
+
+  :root[data-theme="dark"] .logo-for-light { display: none; }
+  :root[data-theme="dark"] .logo-for-dark { display: block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
