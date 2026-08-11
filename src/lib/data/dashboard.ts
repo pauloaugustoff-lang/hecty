@@ -11,6 +11,8 @@ interface RawTx {
   movement_date: string;
   category_id: string | null;
   category: { name: string; color: string } | null;
+  subcategory_id: string | null;
+  subcategory: { name: string; color: string } | null;
   // redemption_details.transaction_id é chave primária (relação 1:1), então
   // o PostgREST retorna um objeto único aqui, não um array.
   redemption_details: {
@@ -28,7 +30,7 @@ async function fetchTransactions(spaceId: string, from: string, to: string): Pro
   const { data, error } = await supabase
     .from("transactions")
     .select(
-      "amount_cents, direction, nature, classification_status, movement_date, category_id, category:categories!transactions_category_id_fkey(name, color), redemption_details(*)",
+      "amount_cents, direction, nature, classification_status, movement_date, category_id, category:categories!transactions_category_id_fkey(name, color), subcategory_id, subcategory:categories!transactions_subcategory_id_fkey(name, color), redemption_details(*)",
     )
     .eq("space_id", spaceId)
     .is("deleted_at", null)
@@ -104,16 +106,25 @@ export async function getMonthlySeries(spaceId: string, monthsBack = 6): Promise
   }));
 }
 
-export interface CategoryBreakdownPoint {
-  categoryId: string;
+export interface SubcategoryBreakdownPoint {
+  subcategoryId: string;
   name: string;
   color: string;
   amountCents: number;
 }
 
+export interface CategoryBreakdownPoint {
+  categoryId: string;
+  name: string;
+  color: string;
+  amountCents: number;
+  subcategories: SubcategoryBreakdownPoint[];
+}
+
 export async function getExpenseBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
   const rows = await fetchTransactions(spaceId, from, to);
   const buckets = new Map<string, CategoryBreakdownPoint>();
+  const subBuckets = new Map<string, Map<string, SubcategoryBreakdownPoint>>();
 
   for (const row of rows) {
     if (row.nature !== "despesa" || row.direction !== "saida") continue;
@@ -126,9 +137,27 @@ export async function getExpenseBreakdown(spaceId: string, from: string, to: str
     if (existing) {
       existing.amountCents += row.amount_cents;
     } else {
-      buckets.set(key, { categoryId: key, name, color, amountCents: row.amount_cents });
+      buckets.set(key, { categoryId: key, name, color, amountCents: row.amount_cents, subcategories: [] });
+    }
+
+    const subKey = row.subcategory_id ?? "sem-subcategoria";
+    const subName = row.subcategory?.name ?? "Sem subcategoria";
+    const subColor = row.subcategory?.color ?? color;
+
+    if (!subBuckets.has(key)) subBuckets.set(key, new Map());
+    const subMap = subBuckets.get(key)!;
+    const existingSub = subMap.get(subKey);
+    if (existingSub) {
+      existingSub.amountCents += row.amount_cents;
+    } else {
+      subMap.set(subKey, { subcategoryId: subKey, name: subName, color: subColor, amountCents: row.amount_cents });
     }
   }
 
-  return Array.from(buckets.values()).sort((a, b) => b.amountCents - a.amountCents);
+  return Array.from(buckets.values())
+    .map((category) => ({
+      ...category,
+      subcategories: Array.from(subBuckets.get(category.categoryId)?.values() ?? []).sort((a, b) => b.amountCents - a.amountCents),
+    }))
+    .sort((a, b) => b.amountCents - a.amountCents);
 }
