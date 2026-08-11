@@ -15,6 +15,7 @@ import { CardPaymentDialog } from "./card-payment-dialog";
 import { TransactionFilters } from "./transaction-filters";
 import { TransactionsTable } from "./transactions-table";
 import type { TransactionNature } from "@/lib/supabase/types";
+import type { TransactionSortBy, TransactionSortDir } from "@/lib/data/transactions";
 
 const PAGE_SIZE = 50;
 
@@ -41,6 +42,8 @@ export default async function TransacoesPage({
       search: params.search,
       limit: PAGE_SIZE,
       offset,
+      sortBy: params.sortBy as TransactionSortBy | undefined,
+      sortDir: params.sortDir as TransactionSortDir | undefined,
     }),
   ]);
 
@@ -87,7 +90,9 @@ export default async function TransacoesPage({
         />
       ) : (
         <>
-          <TransactionsTable spaceId={space.id} transactions={rows} accounts={accounts} cards={cards} categories={categories} />
+          <Suspense>
+            <TransactionsTable spaceId={space.id} transactions={rows} accounts={accounts} cards={cards} categories={categories} />
+          </Suspense>
 
           <div className="mt-4 flex items-center justify-between text-sm text-text-secondary">
             <span>

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Trash2 } from "lucide-react";
-import type { TransactionWithRelations } from "@/lib/data/transactions";
+import { Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import type { TransactionWithRelations, TransactionSortBy } from "@/lib/data/transactions";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
@@ -18,6 +19,15 @@ import { Button } from "@/components/ui/button";
 import { TransactionFormDialog } from "./transaction-form-dialog";
 import { DeleteTransactionButton } from "./delete-transaction-button";
 import { deleteTransactionsAction } from "./actions";
+
+const SORTABLE_COLUMNS: { key: TransactionSortBy; label: string }[] = [
+  { key: "date", label: "Data" },
+  { key: "description", label: "Descrição" },
+  { key: "account", label: "Conta / cartão" },
+  { key: "category", label: "Categoria" },
+  { key: "nature", label: "Natureza" },
+  { key: "value", label: "Valor" },
+];
 
 const TONE_CSS_VAR: Record<string, string> = {
   positive: "var(--positive)",
@@ -42,6 +52,21 @@ export function TransactionsTable({
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const activeSortBy = (searchParams.get("sortBy") as TransactionSortBy | null) ?? "date";
+  const activeSortDir = searchParams.get("sortDir") === "asc" ? "asc" : "desc";
+
+  function handleSort(column: TransactionSortBy) {
+    const nextDir = activeSortBy === column && activeSortDir === "desc" ? "asc" : "desc";
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sortBy", column);
+    params.set("sortDir", nextDir);
+    params.delete("offset");
+    router.push(`${pathname}?${params.toString()}`);
+  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -90,12 +115,26 @@ export function TransactionsTable({
                   aria-label="Selecionar todos"
                 />
               </Th>
-              <Th>Data</Th>
-              <Th>Descrição</Th>
-              <Th>Conta / cartão</Th>
-              <Th>Categoria</Th>
-              <Th>Natureza</Th>
-              <Th className="text-right">Valor</Th>
+              {SORTABLE_COLUMNS.map((col) => (
+                <Th key={col.key} className={col.key === "value" ? "text-right" : undefined}>
+                  <button
+                    type="button"
+                    onClick={() => handleSort(col.key)}
+                    className={`inline-flex items-center gap-1 hover:text-text-primary ${col.key === "value" ? "flex-row-reverse" : ""}`}
+                  >
+                    {col.label}
+                    {activeSortBy === col.key ? (
+                      activeSortDir === "asc" ? (
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      )
+                    ) : (
+                      <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" />
+                    )}
+                  </button>
+                </Th>
+              ))}
               <Th className="w-20" />
             </Tr>
           </Thead>

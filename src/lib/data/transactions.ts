@@ -12,6 +12,9 @@ export interface TransactionWithRelations extends TransactionRow {
   redemption: RedemptionRow | null;
 }
 
+export type TransactionSortBy = "date" | "value" | "description" | "account" | "category" | "nature";
+export type TransactionSortDir = "asc" | "desc";
+
 export interface TransactionFilters {
   from?: string;
   to?: string;
@@ -23,6 +26,8 @@ export interface TransactionFilters {
   search?: string;
   limit?: number;
   offset?: number;
+  sortBy?: TransactionSortBy;
+  sortDir?: TransactionSortDir;
 }
 
 const SELECT_WITH_RELATIONS = `
@@ -44,9 +49,33 @@ export async function listTransactions(
     .from("transactions")
     .select(SELECT_WITH_RELATIONS, { count: "exact" })
     .eq("space_id", spaceId)
-    .is("deleted_at", null)
-    .order("movement_date", { ascending: false })
-    .order("created_at", { ascending: false });
+    .is("deleted_at", null);
+
+  const ascending = filters.sortDir === "asc";
+  switch (filters.sortBy) {
+    case "value":
+      query = query.order("amount_cents", { ascending });
+      break;
+    case "description":
+      query = query.order("original_description", { ascending });
+      break;
+    case "nature":
+      query = query.order("nature", { ascending });
+      break;
+    case "account":
+      query = query
+        .order("name", { ascending, nullsFirst: false, referencedTable: "account" })
+        .order("name", { ascending, nullsFirst: false, referencedTable: "card" });
+      break;
+    case "category":
+      query = query.order("name", { ascending, nullsFirst: false, referencedTable: "category" });
+      break;
+    case "date":
+    default:
+      query = query.order("movement_date", { ascending });
+      break;
+  }
+  query = query.order("created_at", { ascending: false });
 
   if (filters.from) query = query.gte("movement_date", filters.from);
   if (filters.to) query = query.lte("movement_date", filters.to);
