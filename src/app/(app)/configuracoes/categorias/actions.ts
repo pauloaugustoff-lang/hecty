@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { categoryFormSchema } from "@/lib/validation/schemas";
+import type { CategoryRow } from "@/lib/data/categories";
 
 export interface ActionState {
   error?: string;
   success?: boolean;
+  category?: CategoryRow;
 }
 
 function parseCategoryFormData(formData: FormData) {
@@ -30,20 +32,25 @@ export async function createCategoryAction(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.from("categories").insert({
-    space_id: spaceId,
-    name: parsed.data.name,
-    kind: parsed.data.kind,
-    parent_id: parsed.data.parentId,
-    color: parsed.data.color,
-  });
+  const { data: category, error } = await supabase
+    .from("categories")
+    .insert({
+      space_id: spaceId,
+      name: parsed.data.name,
+      kind: parsed.data.kind,
+      parent_id: parsed.data.parentId,
+      color: parsed.data.color,
+    })
+    .select("*")
+    .single();
 
-  if (error) {
+  if (error || !category) {
     return { error: parsed.data.parentId ? "Não foi possível criar a subcategoria." : "Não foi possível criar a categoria." };
   }
 
   revalidatePath("/configuracoes/categorias");
-  return { success: true };
+  revalidatePath("/regras");
+  return { success: true, category };
 }
 
 export async function updateCategoryAction(

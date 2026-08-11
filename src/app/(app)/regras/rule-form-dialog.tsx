@@ -1,14 +1,15 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition, type KeyboardEvent } from "react";
 import { Plus, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { createRuleAction, updateRuleAction, type ActionState } from "./actions";
+import { createCategoryAction } from "../configuracoes/categorias/actions";
 import type { RuleRow } from "@/lib/data/rules";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
-import type { TransactionNature, RuleMatchType, TransactionDirection } from "@/lib/supabase/types";
+import type { TransactionNature, RuleMatchType, TransactionDirection, CategoryKind } from "@/lib/supabase/types";
 import { natureLabels } from "@/lib/domain/labels";
 import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectSeparator } from "@/components/ui/select";
 
 const MATCH_TYPE_LABELS: Record<RuleMatchType, string> = {
   contem: "contém",
@@ -34,6 +35,17 @@ const MATCH_TYPE_LABELS: Record<RuleMatchType, string> = {
   exato: "é exatamente",
   regex: "expressão regular (avançado)",
 };
+
+const CATEGORY_KIND_LABELS: Record<CategoryKind, string> = {
+  despesa: "Despesa",
+  receita: "Receita",
+  investimento: "Investimento",
+  transferencia: "Transferência",
+  outro: "Outro",
+};
+
+const CATEGORY_COLORS = ["#f97316", "#0ea5e9", "#8b5cf6", "#22c55e", "#14b8a6", "#ec4899", "#6366f1", "#94a3b8"];
+const NEW_CATEGORY_VALUE = "__new__";
 
 const initialState: ActionState = {};
 
@@ -74,8 +86,19 @@ export function RuleFormDialog({
   const [minInput, setMinInput] = useState(rule?.min_amount_cents ? formatCentsToBRL(rule.min_amount_cents).replace("R$", "").trim() : "");
   const [maxInput, setMaxInput] = useState(rule?.max_amount_cents ? formatCentsToBRL(rule.max_amount_cents).replace("R$", "").trim() : "");
 
-  const parentCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
-  const subcategories = useMemo(() => categories.filter((c) => c.parent_id === categoryId), [categories, categoryId]);
+  const [localCategories, setLocalCategories] = useState<CategoryRow[]>(categories);
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryKind, setNewCategoryKind] = useState<CategoryKind>("despesa");
+  const [newCategoryColor, setNewCategoryColor] = useState(CATEGORY_COLORS[0]);
+  const [creatingSubcategory, setCreatingSubcategory] = useState(false);
+  const [newSubcategoryName, setNewSubcategoryName] = useState("");
+  const [newSubcategoryColor, setNewSubcategoryColor] = useState(CATEGORY_COLORS[0]);
+  const [isCreatingCategory, startCreateCategoryTransition] = useTransition();
+
+  const parentCategories = useMemo(() => localCategories.filter((c) => !c.parent_id), [localCategories]);
+  const subcategories = useMemo(() => localCategories.filter((c) => c.parent_id === categoryId), [localCategories, categoryId]);
+  const selectedParentCategory = useMemo(() => localCategories.find((c) => c.id === categoryId), [localCategories, categoryId]);
 
   useEffect(() => {
     if (state.success) {
@@ -102,6 +125,50 @@ export function RuleFormDialog({
     } else if (e.key === "Backspace" && !matchValueDraft && matchValues.length > 0) {
       removeMatchValue(matchValues[matchValues.length - 1]);
     }
+  }
+
+  function handleCreateCategory() {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    const fd = new FormData();
+    fd.set("name", name);
+    fd.set("kind", newCategoryKind);
+    fd.set("color", newCategoryColor);
+    startCreateCategoryTransition(async () => {
+      const result = await createCategoryAction(spaceId, {}, fd);
+      if (result.error || !result.category) {
+        toast.error(result.error ?? "Não foi possível criar a categoria.");
+        return;
+      }
+      setLocalCategories((prev) => [...prev, result.category!]);
+      setCategoryId(result.category.id);
+      setSubcategoryId("");
+      setCreatingCategory(false);
+      setNewCategoryName("");
+      toast.success("Categoria criada");
+    });
+  }
+
+  function handleCreateSubcategory() {
+    const name = newSubcategoryName.trim();
+    if (!name || !selectedParentCategory) return;
+    const fd = new FormData();
+    fd.set("name", name);
+    fd.set("kind", selectedParentCategory.kind);
+    fd.set("color", newSubcategoryColor);
+    fd.set("parentId", selectedParentCategory.id);
+    startCreateCategoryTransition(async () => {
+      const result = await createCategoryAction(spaceId, {}, fd);
+      if (result.error || !result.category) {
+        toast.error(result.error ?? "Não foi possível criar a subcategoria.");
+        return;
+      }
+      setLocalCategories((prev) => [...prev, result.category!]);
+      setSubcategoryId(result.category.id);
+      setCreatingSubcategory(false);
+      setNewSubcategoryName("");
+      toast.success("Subcategoria criada");
+    });
   }
 
   function safeCents(v: string): number | null {
@@ -278,7 +345,17 @@ export function RuleFormDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={categoryId || "none"} onValueChange={(v) => { setCategoryId(v === "none" ? "" : v); setSubcategoryId(""); }}>
+              <Select
+                value={categoryId || "none"}
+                onValueChange={(v) => {
+                  if (v === NEW_CATEGORY_VALUE) {
+                    setCreatingCategory(true);
+                    return;
+                  }
+                  setCategoryId(v === "none" ? "" : v);
+                  setSubcategoryId("");
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Categoria" />
                 </SelectTrigger>
@@ -289,9 +366,21 @@ export function RuleFormDialog({
                       {c.name}
                     </SelectItem>
                   ))}
+                  <SelectSeparator />
+                  <SelectItem value={NEW_CATEGORY_VALUE}>+ Criar nova categoria</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={subcategoryId || "none"} onValueChange={(v) => setSubcategoryId(v === "none" ? "" : v)} disabled={!categoryId}>
+              <Select
+                value={subcategoryId || "none"}
+                onValueChange={(v) => {
+                  if (v === NEW_CATEGORY_VALUE) {
+                    setCreatingSubcategory(true);
+                    return;
+                  }
+                  setSubcategoryId(v === "none" ? "" : v);
+                }}
+                disabled={!categoryId}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Subcategoria" />
                 </SelectTrigger>
@@ -302,8 +391,100 @@ export function RuleFormDialog({
                       {c.name}
                     </SelectItem>
                   ))}
+                  <SelectSeparator />
+                  <SelectItem value={NEW_CATEGORY_VALUE}>+ Criar nova subcategoria</SelectItem>
                 </SelectContent>
               </Select>
+
+              {creatingCategory ? (
+                <div className="col-span-2 space-y-2 rounded-[var(--radius-sm)] border border-accent/40 bg-surface-raised p-3">
+                  <div className="flex gap-2">
+                    <Input
+                      autoFocus
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="Nome da nova categoria"
+                      className="flex-1"
+                    />
+                    <Select value={newCategoryKind} onValueChange={(v) => setNewCategoryKind(v as CategoryKind)}>
+                      <SelectTrigger className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(CATEGORY_KIND_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {CATEGORY_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setNewCategoryColor(c)}
+                        className="h-5 w-5 rounded-full border-2 transition-transform"
+                        style={{ backgroundColor: c, borderColor: newCategoryColor === c ? "var(--text-primary)" : "transparent" }}
+                        aria-label={`Selecionar cor ${c}`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setCreatingCategory(false)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleCreateCategory}
+                      disabled={isCreatingCategory || !newCategoryName.trim()}
+                    >
+                      {isCreatingCategory ? "Criando…" : "Criar categoria"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {creatingSubcategory && selectedParentCategory ? (
+                <div className="col-span-2 space-y-2 rounded-[var(--radius-sm)] border border-accent/40 bg-surface-raised p-3">
+                  <Input
+                    autoFocus
+                    value={newSubcategoryName}
+                    onChange={(e) => setNewSubcategoryName(e.target.value)}
+                    placeholder={`Nome da nova subcategoria de ${selectedParentCategory.name}`}
+                  />
+                  <div className="flex items-center gap-2">
+                    {CATEGORY_COLORS.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setNewSubcategoryColor(c)}
+                        className="h-5 w-5 rounded-full border-2 transition-transform"
+                        style={{ backgroundColor: c, borderColor: newSubcategoryColor === c ? "var(--text-primary)" : "transparent" }}
+                        aria-label={`Selecionar cor ${c}`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setCreatingSubcategory(false)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleCreateSubcategory}
+                      disabled={isCreatingCategory || !newSubcategoryName.trim()}
+                    >
+                      {isCreatingCategory ? "Criando…" : "Criar subcategoria"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
               <Input name="actionCounterparty" defaultValue={rule?.action_counterparty ?? ""} placeholder="Estabelecimento (opcional)" className="col-span-2" />
             </div>
             <div className="mt-3 flex gap-4">
