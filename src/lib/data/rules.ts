@@ -18,7 +18,7 @@ export function toRuleDefinition(row: RuleRow): RuleDefinition {
     isActive: row.is_active,
     priority: row.priority,
     matchType: row.match_type,
-    matchValue: row.match_value,
+    matchValues: row.match_values,
     sourceAccountId: row.source_account_id,
     sourceCardId: row.source_card_id,
     minAmountCents: row.min_amount_cents,

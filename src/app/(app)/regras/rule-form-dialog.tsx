@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
-import { Plus, Pencil } from "lucide-react";
+import { useActionState, useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { Plus, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 import { createRuleAction, updateRuleAction, type ActionState } from "./actions";
 import type { RuleRow } from "@/lib/data/rules";
@@ -60,6 +60,8 @@ export function RuleFormDialog({
   const [state, formAction, isPending] = useActionState(boundAction, initialState);
 
   const [matchType, setMatchType] = useState<RuleMatchType>(rule?.match_type ?? "contem");
+  const [matchValues, setMatchValues] = useState<string[]>(rule?.match_values ?? []);
+  const [matchValueDraft, setMatchValueDraft] = useState("");
   const [direction, setDirection] = useState<TransactionDirection | "">(rule?.direction ?? "");
   const [sourceAccountId, setSourceAccountId] = useState(rule?.source_account_id ?? "");
   const [sourceCardId, setSourceCardId] = useState(rule?.source_card_id ?? "");
@@ -81,6 +83,26 @@ export function RuleFormDialog({
       setOpen(false);
     }
   }, [state.success, isEdit]);
+
+  function addMatchValue(raw: string) {
+    const value = raw.trim();
+    if (!value) return;
+    setMatchValues((prev) => (prev.includes(value) ? prev : [...prev, value]));
+    setMatchValueDraft("");
+  }
+
+  function removeMatchValue(value: string) {
+    setMatchValues((prev) => prev.filter((v) => v !== value));
+  }
+
+  function handleMatchValueKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addMatchValue(matchValueDraft);
+    } else if (e.key === "Backspace" && !matchValueDraft && matchValues.length > 0) {
+      removeMatchValue(matchValues[matchValues.length - 1]);
+    }
+  }
 
   function safeCents(v: string): number | null {
     if (!v) return null;
@@ -118,6 +140,12 @@ export function RuleFormDialog({
         <form action={formAction} className="space-y-4">
           <input type="hidden" name="isActive" value={String(isActive)} />
           <input type="hidden" name="matchType" value={matchType} />
+          {matchValues.map((value) => (
+            <input key={value} type="hidden" name="matchValues" value={value} />
+          ))}
+          {matchValueDraft.trim() && !matchValues.includes(matchValueDraft.trim()) ? (
+            <input type="hidden" name="matchValues" value={matchValueDraft.trim()} />
+          ) : null}
           <input type="hidden" name="direction" value={direction} />
           <input type="hidden" name="sourceAccountId" value={sourceAccountId} />
           <input type="hidden" name="sourceCardId" value={sourceCardId} />
@@ -155,8 +183,31 @@ export function RuleFormDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <Input name="matchValue" required defaultValue={rule?.match_value} placeholder="texto ou padrão" className="col-span-2" />
+              <div className="col-span-2 flex min-h-9 flex-wrap items-center gap-1.5 rounded-[var(--radius-sm)] border border-border bg-surface-raised px-2 py-1.5">
+                {matchValues.map((value) => (
+                  <span
+                    key={value}
+                    className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[12px] text-accent"
+                  >
+                    {value}
+                    <button type="button" onClick={() => removeMatchValue(value)} aria-label={`Remover "${value}"`}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  value={matchValueDraft}
+                  onChange={(e) => setMatchValueDraft(e.target.value)}
+                  onKeyDown={handleMatchValueKeyDown}
+                  onBlur={() => addMatchValue(matchValueDraft)}
+                  placeholder={matchValues.length === 0 ? "texto ou padrão — Enter para adicionar mais" : "adicionar outra…"}
+                  className="min-w-24 flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-tertiary"
+                />
+              </div>
             </div>
+            <p className="mt-1.5 text-[11px] text-text-tertiary">
+              A regra casa se a descrição bater com qualquer uma das palavras-chave. Enter ou vírgula adiciona.
+            </p>
 
             <p className="mb-2 mt-4 text-[13px] font-medium text-text-secondary">E, opcionalmente...</p>
             <div className="grid grid-cols-2 gap-2">

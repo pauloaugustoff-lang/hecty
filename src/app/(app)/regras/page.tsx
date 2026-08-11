@@ -75,7 +75,13 @@ export default async function RegrasPage() {
                   <Td className="tabular text-text-secondary">{rule.priority}</Td>
                   <Td className="font-medium">{rule.name}</Td>
                   <Td className="text-[13px] text-text-secondary">
-                    descrição {MATCH_TYPE_SHORT[rule.match_type]} &quot;{rule.match_value}&quot;
+                    descrição {MATCH_TYPE_SHORT[rule.match_type]}{" "}
+                    {rule.match_values.map((v, i) => (
+                      <span key={v}>
+                        {i > 0 ? " ou " : ""}
+                        &quot;{v}&quot;
+                      </span>
+                    ))}
                     {rule.min_amount_cents ? ` · mín. ${formatCentsToBRL(rule.min_amount_cents)}` : ""}
                   </Td>
                   <Td className="text-[13px] text-text-secondary">

@@ -7,7 +7,7 @@ export interface RuleDefinition {
   isActive: boolean;
   priority: number;
   matchType: RuleMatchType;
-  matchValue: string;
+  matchValues: string[];
   sourceAccountId?: string | null;
   sourceCardId?: string | null;
   minAmountCents?: number | null;
@@ -68,10 +68,15 @@ function matchesText(description: string, matchType: RuleMatchType, matchValue: 
   }
 }
 
+/** A regra casa se a descrição bater com QUALQUER uma das palavras-chave configuradas. */
+function matchesAnyText(description: string, matchType: RuleMatchType, matchValues: string[]): boolean {
+  return matchValues.some((value) => matchesText(description, matchType, value));
+}
+
 export function ruleMatches(rule: RuleDefinition, candidate: RuleCandidate): boolean {
   if (!rule.isActive) return false;
 
-  if (!matchesText(candidate.description, rule.matchType, rule.matchValue)) return false;
+  if (!matchesAnyText(candidate.description, rule.matchType, rule.matchValues)) return false;
 
   if (rule.sourceAccountId && rule.sourceAccountId !== candidate.accountId) return false;
   if (rule.sourceCardId && rule.sourceCardId !== candidate.cardId) return false;

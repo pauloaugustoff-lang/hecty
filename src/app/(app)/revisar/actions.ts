@@ -53,7 +53,7 @@ export async function bulkClassifyAction(spaceId: string, userId: string, input:
       space_id: spaceId,
       name: `Auto: ${input.ruleMatchValue}`,
       match_type: "contem",
-      match_value: normalizeDescription(input.ruleMatchValue),
+      match_values: [normalizeDescription(input.ruleMatchValue)],
       action_nature: input.nature,
       action_category_id: input.categoryId,
       action_subcategory_id: input.subcategoryId,

@@ -417,7 +417,7 @@ export async function seedDemoData(supabase: Client, userId: string): Promise<st
     space_id: spaceId,
     name: "Supermercados BH",
     match_type: "contem",
-    match_value: "SUPERMERCADOS BH",
+    match_values: ["SUPERMERCADOS BH"],
     action_nature: "despesa",
     action_category_id: cat("Alimentação"),
     action_subcategory_id: cat("Supermercado"),

@@ -234,7 +234,7 @@ export type RuleRow = {
   is_active: boolean;
   priority: number;
   match_type: RuleMatchType;
-  match_value: string;
+  match_values: string[];
   source_account_id: string | null;
   source_card_id: string | null;
   min_amount_cents: number | null;
@@ -360,7 +360,7 @@ export type Database = {
       };
       rules: {
         Row: RuleRow;
-        Insert: Partial<RuleRow> & { space_id: string; name: string; match_value: string; created_by: string };
+        Insert: Partial<RuleRow> & { space_id: string; name: string; match_values: string[]; created_by: string };
         Update: Partial<RuleRow>;
         Relationships: [];
       };

@@ -8,7 +8,7 @@ function makeRule(overrides: Partial<RuleDefinition> = {}): RuleDefinition {
     isActive: true,
     priority: 100,
     matchType: "contem",
-    matchValue: "SUPERMERCADOS BH",
+    matchValues: ["SUPERMERCADOS BH"],
     actionNature: "despesa",
     actionCategoryId: "cat-alimentacao",
     actionSubcategoryId: "sub-supermercado",
@@ -26,7 +26,7 @@ const candidate = {
 
 describe("ruleMatches", () => {
   it("casa quando a descrição contém o texto (ignora acento/caixa)", () => {
-    expect(ruleMatches(makeRule({ matchValue: "supermercados bh" }), candidate)).toBe(true);
+    expect(ruleMatches(makeRule({ matchValues: ["supermercados bh"] }), candidate)).toBe(true);
   });
 
   it("não casa quando a regra está inativa", () => {
@@ -34,25 +34,30 @@ describe("ruleMatches", () => {
   });
 
   it("respeita comeca_com", () => {
-    expect(ruleMatches(makeRule({ matchType: "comeca_com", matchValue: "COMPRA" }), candidate)).toBe(true);
-    expect(ruleMatches(makeRule({ matchType: "comeca_com", matchValue: "SUPERMERCADOS" }), candidate)).toBe(false);
+    expect(ruleMatches(makeRule({ matchType: "comeca_com", matchValues: ["COMPRA"] }), candidate)).toBe(true);
+    expect(ruleMatches(makeRule({ matchType: "comeca_com", matchValues: ["SUPERMERCADOS"] }), candidate)).toBe(false);
   });
 
   it("respeita termina_com", () => {
-    expect(ruleMatches(makeRule({ matchType: "termina_com", matchValue: "LTDA" }), candidate)).toBe(true);
+    expect(ruleMatches(makeRule({ matchType: "termina_com", matchValues: ["LTDA"] }), candidate)).toBe(true);
   });
 
   it("respeita exato", () => {
-    expect(ruleMatches(makeRule({ matchType: "exato", matchValue: candidate.description }), candidate)).toBe(true);
-    expect(ruleMatches(makeRule({ matchType: "exato", matchValue: "OUTRA COISA" }), candidate)).toBe(false);
+    expect(ruleMatches(makeRule({ matchType: "exato", matchValues: [candidate.description] }), candidate)).toBe(true);
+    expect(ruleMatches(makeRule({ matchType: "exato", matchValues: ["OUTRA COISA"] }), candidate)).toBe(false);
   });
 
   it("suporta regex em modo avançado", () => {
-    expect(ruleMatches(makeRule({ matchType: "regex", matchValue: "^COMPRA .*BH" }), candidate)).toBe(true);
+    expect(ruleMatches(makeRule({ matchType: "regex", matchValues: ["^COMPRA .*BH"] }), candidate)).toBe(true);
   });
 
   it("regex inválida não derruba a avaliação, apenas não casa", () => {
-    expect(ruleMatches(makeRule({ matchType: "regex", matchValue: "(" }), candidate)).toBe(false);
+    expect(ruleMatches(makeRule({ matchType: "regex", matchValues: ["("] }), candidate)).toBe(false);
+  });
+
+  it("casa se QUALQUER uma das palavras-chave bater (OR)", () => {
+    expect(ruleMatches(makeRule({ matchValues: ["ALICE", "MATHEUS", "SUPERMERCADOS BH"] }), candidate)).toBe(true);
+    expect(ruleMatches(makeRule({ matchValues: ["ALICE", "MATHEUS"] }), candidate)).toBe(false);
   });
 
   it("filtra por conta de origem", () => {
@@ -73,15 +78,15 @@ describe("ruleMatches", () => {
 
 describe("findMatchingRule", () => {
   it("escolhe a regra de maior prioridade (menor número) entre as que casam", () => {
-    const specific = makeRule({ id: "specific", priority: 1, matchValue: "SUPERMERCADOS BH" });
-    const generic = makeRule({ id: "generic", priority: 50, matchValue: "COMPRA" });
+    const specific = makeRule({ id: "specific", priority: 1, matchValues: ["SUPERMERCADOS BH"] });
+    const generic = makeRule({ id: "generic", priority: 50, matchValues: ["COMPRA"] });
 
     const winner = findMatchingRule([generic, specific], candidate);
     expect(winner?.id).toBe("specific");
   });
 
   it("retorna null quando nenhuma regra casa", () => {
-    const winner = findMatchingRule([makeRule({ matchValue: "ALGO QUE NAO EXISTE" })], candidate);
+    const winner = findMatchingRule([makeRule({ matchValues: ["ALGO QUE NAO EXISTE"] })], candidate);
     expect(winner).toBeNull();
   });
 });

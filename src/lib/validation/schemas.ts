@@ -96,7 +96,9 @@ export const ruleFormSchema = z.object({
   isActive: z.boolean().default(true),
   priority: z.number().int().min(1).max(1000).default(100),
   matchType: ruleMatchTypeSchema,
-  matchValue: z.string().trim().min(1, "Informe o texto a procurar."),
+  matchValues: z
+    .array(z.string().trim().min(1).max(120))
+    .min(1, "Informe ao menos uma palavra-chave."),
   sourceAccountId: z.string().uuid().nullable().optional(),
   sourceCardId: z.string().uuid().nullable().optional(),
   minAmountCents: z.number().int().nonnegative().nullable().optional(),
