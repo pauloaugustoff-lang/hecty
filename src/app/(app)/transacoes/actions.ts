@@ -230,6 +230,25 @@ export async function deleteTransactionAction(transactionId: string) {
   revalidatePath("/visao-geral");
 }
 
+export async function deleteTransactionsAction(transactionIds: string[]): Promise<ActionState> {
+  if (transactionIds.length === 0) return { error: "Nenhum lançamento selecionado." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("transactions")
+    .update({ deleted_at: new Date().toISOString() })
+    .in("id", transactionIds);
+
+  if (error) {
+    return { error: "Não foi possível excluir os lançamentos selecionados." };
+  }
+
+  revalidatePath("/transacoes");
+  revalidatePath("/visao-geral");
+  revalidatePath("/revisar");
+  return { success: true };
+}
+
 export interface TransferActionState {
   error?: string;
   success?: boolean;

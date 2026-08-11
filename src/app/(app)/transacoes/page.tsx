@@ -5,32 +5,18 @@ import { listTransactions } from "@/lib/data/transactions";
 import { listAccounts } from "@/lib/data/accounts";
 import { listCards } from "@/lib/data/cards";
 import { listCategories } from "@/lib/data/categories";
-import { natureLabels, natureTones } from "@/lib/domain/labels";
-import { formatCentsToBRL } from "@/lib/money/money";
 import { PageHeader } from "@/components/layout/page-header";
-import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeftRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { TransactionFormDialog } from "./transaction-form-dialog";
 import { TransferDialog } from "./transfer-dialog";
 import { CardPaymentDialog } from "./card-payment-dialog";
 import { TransactionFilters } from "./transaction-filters";
-import { DeleteTransactionButton } from "./delete-transaction-button";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { TransactionsTable } from "./transactions-table";
 import type { TransactionNature } from "@/lib/supabase/types";
 
 const PAGE_SIZE = 50;
-
-const TONE_CSS_VAR: Record<string, string> = {
-  positive: "var(--positive)",
-  negative: "var(--negative)",
-  pending: "var(--pending)",
-  transfer: "var(--transfer)",
-  neutral: "var(--border-strong)",
-};
 
 export default async function TransacoesPage({
   searchParams,
@@ -101,64 +87,7 @@ export default async function TransacoesPage({
         />
       ) : (
         <>
-          <div className="rounded-[var(--radius-lg)] border border-border-subtle">
-            <Table>
-              <Thead>
-                <Tr>
-                  <Th>Data</Th>
-                  <Th>Descrição</Th>
-                  <Th>Conta / cartão</Th>
-                  <Th>Categoria</Th>
-                  <Th>Natureza</Th>
-                  <Th className="text-right">Valor</Th>
-                  <Th className="w-20" />
-                </Tr>
-              </Thead>
-              <Tbody>
-                {rows.map((tx) => (
-                  <Tr key={tx.id} className="border-l-2" style={{ borderLeftColor: TONE_CSS_VAR[natureTones[tx.nature]] }}>
-                    <Td className="whitespace-nowrap text-text-secondary tabular text-[13px]">
-                      {format(new Date(`${tx.movement_date}T00:00:00`), "dd/MM/yyyy", { locale: ptBR })}
-                    </Td>
-                    <Td>
-                      <TransactionFormDialog
-                        spaceId={space.id}
-                        accounts={accounts}
-                        cards={cards}
-                        categories={categories}
-                        transaction={tx}
-                        trigger={
-                          <button className="text-left font-medium text-text-primary hover:text-accent">
-                            {tx.original_description}
-                          </button>
-                        }
-                      />
-                      {tx.installment_total ? (
-                        <span className="ml-1.5 text-[11px] text-text-tertiary">
-                          {tx.installment_number}/{tx.installment_total}
-                        </span>
-                      ) : null}
-                    </Td>
-                    <Td className="text-text-secondary">{tx.account?.name ?? tx.card?.name ?? "—"}</Td>
-                    <Td className="text-text-secondary">
-                      {tx.category?.name ?? <span className="text-text-tertiary">Sem categoria</span>}
-                      {tx.subcategory ? ` · ${tx.subcategory.name}` : ""}
-                    </Td>
-                    <Td>
-                      <Badge tone={natureTones[tx.nature]}>{natureLabels[tx.nature]}</Badge>
-                    </Td>
-                    <Td className={`text-right tabular font-medium ${tx.direction === "entrada" ? "text-positive" : "text-text-primary"}`}>
-                      {tx.direction === "saida" ? "−" : "+"}
-                      {formatCentsToBRL(tx.amount_cents)}
-                    </Td>
-                    <Td>
-                      <DeleteTransactionButton transactionId={tx.id} />
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </div>
+          <TransactionsTable spaceId={space.id} transactions={rows} accounts={accounts} cards={cards} categories={categories} />
 
           <div className="mt-4 flex items-center justify-between text-sm text-text-secondary">
             <span>
