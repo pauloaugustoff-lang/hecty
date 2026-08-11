@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Trash2, Pencil, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import type { TransactionWithRelations, TransactionSortBy } from "@/lib/data/transactions";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
@@ -135,7 +135,7 @@ export function TransactionsTable({
                   </button>
                 </Th>
               ))}
-              <Th className="w-20" />
+              <Th className="w-24" />
             </Tr>
           </Thead>
           <Tbody>
@@ -179,7 +179,21 @@ export function TransactionsTable({
                   {formatCentsToBRL(tx.amount_cents)}
                 </Td>
                 <Td>
-                  <DeleteTransactionButton transactionId={tx.id} />
+                  <div className="flex justify-end gap-0.5">
+                    <TransactionFormDialog
+                      spaceId={spaceId}
+                      accounts={accounts}
+                      cards={cards}
+                      categories={categories}
+                      transaction={tx}
+                      trigger={
+                        <Button variant="ghost" size="icon" aria-label={`Editar ${tx.original_description}`}>
+                          <Pencil className="h-3.5 w-3.5 text-text-tertiary" />
+                        </Button>
+                      }
+                    />
+                    <DeleteTransactionButton transactionId={tx.id} />
+                  </div>
                 </Td>
               </Tr>
             ))}
