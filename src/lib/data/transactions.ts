@@ -10,6 +10,8 @@ export interface TransactionWithRelations extends TransactionRow {
   category: { id: string; name: string; color: string } | null;
   subcategory: { id: string; name: string } | null;
   redemption: RedemptionRow | null;
+  /** Preenchido quando nature = "reembolso" e há vínculo com a despesa reembolsada. */
+  linked_expense: { id: string; original_description: string; amount_cents: number } | null;
 }
 
 export type TransactionSortBy = "date" | "value" | "description" | "account" | "category" | "nature";
@@ -36,7 +38,8 @@ const SELECT_WITH_RELATIONS = `
   card:cards!transactions_card_id_fkey(id, name),
   category:categories!transactions_category_id_fkey(id, name, color),
   subcategory:categories!transactions_subcategory_id_fkey(id, name),
-  redemption:redemption_details(*)
+  redemption:redemption_details(*),
+  linked_expense:transactions!linked_transaction_id(id, original_description, amount_cents)
 `;
 
 export async function listTransactions(

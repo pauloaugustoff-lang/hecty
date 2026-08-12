@@ -84,6 +84,8 @@ export const transactionFormSchema = z
     counterparty: z.string().trim().max(120).default(""),
     notes: z.string().trim().max(1000).default(""),
     tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
+    /** Só relevante quando nature === "reembolso": qual despesa isso reembolsa. */
+    linkedTransactionId: z.string().uuid().nullable().optional(),
   })
   .refine((data) => Boolean(data.accountId) !== Boolean(data.cardId), {
     message: "Informe uma conta OU um cartão, nunca os dois.",

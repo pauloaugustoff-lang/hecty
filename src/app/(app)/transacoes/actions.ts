@@ -14,6 +14,41 @@ export interface ActionState {
   success?: boolean;
 }
 
+export interface ExpenseSearchResult {
+  id: string;
+  originalDescription: string;
+  amountCents: number;
+  movementDate: string;
+  categoryName: string | null;
+}
+
+/** Usado no picker "Qual despesa isso reembolsa?" ao lançar um reembolso. */
+export async function searchExpenseTransactionsAction(spaceId: string, query: string): Promise<ExpenseSearchResult[]> {
+  if (!query.trim()) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("id, original_description, amount_cents, movement_date, category:categories!transactions_category_id_fkey(name)")
+    .eq("space_id", spaceId)
+    .eq("nature", "despesa")
+    .eq("direction", "saida")
+    .is("deleted_at", null)
+    .ilike("normalized_description", `%${normalizeDescription(query)}%`)
+    .order("movement_date", { ascending: false })
+    .limit(10);
+
+  if (error || !data) return [];
+
+  return data.map((tx) => ({
+    id: tx.id,
+    originalDescription: tx.original_description,
+    amountCents: tx.amount_cents,
+    movementDate: tx.movement_date,
+    categoryName: (tx.category as unknown as { name: string } | null)?.name ?? null,
+  }));
+}
+
 function classificationStatusFor(nature: string, hasCategory: boolean): "classificado" | "nao_classificado" {
   if (nature === "nao_classificado" || nature === "resgate_a_decompor") return "nao_classificado";
   if (nature === "transferencia_entre_contas" || nature === "pagamento_cartao") return "classificado";
@@ -25,6 +60,7 @@ function parseTransactionFormData(formData: FormData) {
   const cardId = formData.get("cardId");
   const categoryId = formData.get("categoryId");
   const subcategoryId = formData.get("subcategoryId");
+  const linkedTransactionId = formData.get("linkedTransactionId");
 
   return transactionFormSchema.safeParse({
     movementDate: formData.get("movementDate"),
@@ -40,6 +76,7 @@ function parseTransactionFormData(formData: FormData) {
     counterparty: formData.get("counterparty") ?? "",
     notes: formData.get("notes") ?? "",
     tags: [],
+    linkedTransactionId: linkedTransactionId ? String(linkedTransactionId) : null,
   });
 }
 
@@ -85,6 +122,7 @@ export async function createTransactionAction(
       origin: "manual",
       classification_status: classificationStatusFor(parsed.data.nature, Boolean(parsed.data.categoryId)),
       dedup_hash: dedupHash,
+      linked_transaction_id: parsed.data.nature === "reembolso" ? parsed.data.linkedTransactionId : null,
     })
     .select("id")
     .single();
@@ -100,6 +138,7 @@ export async function createTransactionAction(
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
   revalidatePath("/revisar");
+  revalidatePath("/planejamento");
   return { success: true };
 }
 
@@ -144,6 +183,7 @@ export async function updateTransactionAction(
       notes: parsed.data.notes,
       classification_status: classificationStatusFor(parsed.data.nature, Boolean(parsed.data.categoryId)),
       dedup_hash: dedupHash,
+      linked_transaction_id: parsed.data.nature === "reembolso" ? parsed.data.linkedTransactionId : null,
     })
     .eq("id", transactionId);
 
@@ -160,6 +200,7 @@ export async function updateTransactionAction(
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
   revalidatePath("/revisar");
+  revalidatePath("/planejamento");
   return { success: true };
 }
 
@@ -246,6 +287,7 @@ export async function deleteTransactionsAction(transactionIds: string[]): Promis
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
   revalidatePath("/revisar");
+  revalidatePath("/planejamento");
   return { success: true };
 }
 

@@ -1,9 +1,15 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState } from "react";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, X, Search } from "lucide-react";
 import { toast } from "sonner";
-import { createTransactionAction, updateTransactionAction, type ActionState } from "./actions";
+import {
+  createTransactionAction,
+  updateTransactionAction,
+  searchExpenseTransactionsAction,
+  type ActionState,
+  type ExpenseSearchResult,
+} from "./actions";
 import type { TransactionWithRelations } from "@/lib/data/transactions";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
@@ -84,6 +90,13 @@ export function TransactionFormDialog({
   // sobrescrever silenciosamente assim que o diálogo abre.
   const [competenceDateTouched, setCompetenceDateTouched] = useState(Boolean(transaction));
 
+  const [linkedExpense, setLinkedExpense] = useState<{ id: string; original_description: string; amount_cents: number } | null>(
+    transaction?.linked_expense ?? null,
+  );
+  const [expenseSearch, setExpenseSearch] = useState("");
+  const [expenseResults, setExpenseResults] = useState<ExpenseSearchResult[]>([]);
+  const [isSearchingExpense, setIsSearchingExpense] = useState(false);
+
   const isRedemption = nature === "resgate_investimento" || nature === "resgate_a_decompor";
   const parentCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
   const subcategories = useMemo(
@@ -106,6 +119,20 @@ export function TransactionFormDialog({
     const dueDate = getStatementPeriod(selectedCard.closing_day, selectedCard.due_day, new Date(`${movementDate}T00:00:00`)).dueDate;
     setCompetenceDate(format(dueDate, "yyyy-MM-dd"));
   }, [selectedCard, movementDate, competenceDateTouched]);
+
+  useEffect(() => {
+    if (nature !== "reembolso" || !expenseSearch.trim()) {
+      setExpenseResults([]);
+      return;
+    }
+    setIsSearchingExpense(true);
+    const timeout = setTimeout(() => {
+      searchExpenseTransactionsAction(spaceId, expenseSearch)
+        .then(setExpenseResults)
+        .finally(() => setIsSearchingExpense(false));
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [nature, expenseSearch, spaceId]);
 
   useEffect(() => {
     if (state.success) {
@@ -154,6 +181,7 @@ export function TransactionFormDialog({
           <input type="hidden" name="cardId" value={cardId} />
           <input type="hidden" name="categoryId" value={categoryId} />
           <input type="hidden" name="subcategoryId" value={subcategoryId} />
+          <input type="hidden" name="linkedTransactionId" value={linkedExpense?.id ?? ""} />
 
           <div className="flex gap-1 rounded-[var(--radius-md)] border border-border p-1">
             {(["saida", "entrada"] as const).map((d) => (
@@ -253,6 +281,70 @@ export function TransactionFormDialog({
                 </SelectContent>
               </Select>
             </div>
+
+            {nature === "reembolso" ? (
+              <div className="col-span-2">
+                <Label>Qual despesa isso reembolsa?</Label>
+                {linkedExpense ? (
+                  <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-border bg-surface-raised px-3 py-2 text-sm">
+                    <span className="text-text-primary">
+                      {linkedExpense.original_description} — {formatCentsToBRL(linkedExpense.amount_cents)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setLinkedExpense(null)}
+                      aria-label="Remover vínculo"
+                      className="text-text-tertiary hover:text-text-primary"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
+                      <Input
+                        value={expenseSearch}
+                        onChange={(e) => setExpenseSearch(e.target.value)}
+                        placeholder="Buscar pela descrição da despesa…"
+                        className="pl-8"
+                      />
+                    </div>
+                    {expenseSearch.trim() ? (
+                      <div className="absolute z-10 mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface-overlay shadow-[var(--shadow-md)]">
+                        {isSearchingExpense ? (
+                          <p className="px-3 py-2 text-[13px] text-text-tertiary">Buscando…</p>
+                        ) : expenseResults.length === 0 ? (
+                          <p className="px-3 py-2 text-[13px] text-text-tertiary">Nenhuma despesa encontrada.</p>
+                        ) : (
+                          expenseResults.map((r) => (
+                            <button
+                              key={r.id}
+                              type="button"
+                              onClick={() => {
+                                setLinkedExpense({ id: r.id, original_description: r.originalDescription, amount_cents: r.amountCents });
+                                setExpenseSearch("");
+                                setExpenseResults([]);
+                              }}
+                              className="flex w-full items-center justify-between px-3 py-2 text-left text-[13px] hover:bg-surface-sunken"
+                            >
+                              <span>
+                                {r.originalDescription}
+                                {r.categoryName ? <span className="text-text-tertiary"> · {r.categoryName}</span> : null}
+                              </span>
+                              <span className="tabular text-text-secondary">{formatCentsToBRL(r.amountCents)}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+                <p className="mt-1.5 text-[11px] text-text-tertiary">
+                  Vinculando, o valor deste reembolso abate o gasto daquela categoria — não fica só contando como receita à parte.
+                </p>
+              </div>
+            ) : null}
 
             {!isRedemption && (
               <>
