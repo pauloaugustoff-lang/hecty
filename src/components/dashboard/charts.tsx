@@ -77,13 +77,19 @@ export function CashFlowChart({ data }: { data: MonthlyPoint[] }) {
   );
 }
 
-export function ExpenseByCategoryChart({ data }: { data: CategoryBreakdownPoint[] }) {
+export function CategoryBreakdownChart({
+  data,
+  emptyMessage = "Nenhum lançamento classificado no período.",
+}: {
+  data: CategoryBreakdownPoint[];
+  emptyMessage?: string;
+}) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const top = data.slice(0, 8);
   const total = data.reduce((sum, d) => sum + d.amountCents, 0);
 
   if (top.length === 0) {
-    return <p className="py-8 text-center text-sm text-text-tertiary">Nenhuma despesa classificada no período.</p>;
+    return <p className="py-8 text-center text-sm text-text-tertiary">{emptyMessage}</p>;
   }
 
   function toggle(categoryId: string) {

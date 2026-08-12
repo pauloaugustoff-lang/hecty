@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { computeDashboardMetrics, type DashboardTransactionInput, type DashboardMetrics } from "@/lib/domain/dashboard-metrics";
 import { analyzeRedemption } from "@/lib/money/redemption";
+import { REVENUE_NATURES } from "@/lib/domain/labels";
 import { format, startOfMonth, subMonths } from "date-fns";
 
 const REIMBURSING_NATURES = ["reembolso", "estorno"] as const;
@@ -170,13 +171,16 @@ export interface CategoryBreakdownPoint {
   subcategories: SubcategoryBreakdownPoint[];
 }
 
-export async function getExpenseBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
-  const rows = await fetchTransactions(spaceId, from, to);
+function buildCategoryBreakdown(
+  rows: RawTx[],
+  direction: "entrada" | "saida",
+  includesNature: (nature: string) => boolean,
+): CategoryBreakdownPoint[] {
   const buckets = new Map<string, CategoryBreakdownPoint>();
   const subBuckets = new Map<string, Map<string, SubcategoryBreakdownPoint>>();
 
   for (const row of rows) {
-    if (row.nature !== "despesa" || row.direction !== "saida") continue;
+    if (row.direction !== direction || !includesNature(row.nature)) continue;
 
     const key = row.category_id ?? "sem-categoria";
     const name = row.category?.name ?? "Sem categoria";
@@ -209,4 +213,15 @@ export async function getExpenseBreakdown(spaceId: string, from: string, to: str
       subcategories: Array.from(subBuckets.get(category.categoryId)?.values() ?? []).sort((a, b) => b.amountCents - a.amountCents),
     }))
     .sort((a, b) => b.amountCents - a.amountCents);
+}
+
+export async function getExpenseBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
+  const rows = await fetchTransactions(spaceId, from, to);
+  return buildCategoryBreakdown(rows, "saida", (nature) => nature === "despesa");
+}
+
+export async function getRevenueBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
+  const rows = await fetchTransactions(spaceId, from, to);
+  const revenueNatures = new Set<string>(REVENUE_NATURES);
+  return buildCategoryBreakdown(rows, "entrada", (nature) => revenueNatures.has(nature));
 }
