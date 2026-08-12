@@ -107,16 +107,16 @@ export default async function VisaoGeralPage({
           <CategoryBreakdownChart data={expenseBreakdown} emptyMessage="Nenhuma despesa classificada no período." />
         </div>
 
-        <div className="rounded-[var(--radius-lg)] border border-border-subtle p-6">
-          <h2 className="mb-1 font-display text-base font-medium text-text-primary">Receitas por categoria</h2>
-          <p className="mb-3 text-[13px] text-text-secondary">De onde veio o dinheiro no período.</p>
-          <CategoryBreakdownChart data={revenueBreakdown} emptyMessage="Nenhuma receita classificada no período." />
-        </div>
-
         <div className="rounded-[var(--radius-lg)] border border-border-subtle p-6 lg:col-span-2">
           <h2 className="mb-1 font-display text-base font-medium text-text-primary">Fluxo de caixa (resultado mensal)</h2>
           <p className="mb-3 text-[13px] text-text-secondary">Evolução do resultado econômico nos últimos 6 meses.</p>
           <CashFlowChart data={monthlySeries} />
+        </div>
+
+        <div className="rounded-[var(--radius-lg)] border border-border-subtle p-6">
+          <h2 className="mb-1 font-display text-base font-medium text-text-primary">Receitas por categoria</h2>
+          <p className="mb-3 text-[13px] text-text-secondary">De onde veio o dinheiro no período.</p>
+          <CategoryBreakdownChart data={revenueBreakdown} emptyMessage="Nenhuma receita classificada no período." />
         </div>
 
         <div className="rounded-[var(--radius-lg)] border border-border-subtle p-6">
