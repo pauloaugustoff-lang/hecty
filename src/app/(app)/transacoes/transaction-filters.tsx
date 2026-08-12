@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
+import type { CategoryRow } from "@/lib/data/categories";
 import { natureLabels } from "@/lib/domain/labels";
 import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
 import { Input } from "@/components/ui/input";
@@ -16,13 +17,25 @@ function centsParamToInput(value: string | null): string {
   return formatCentsToBRL(cents).replace("R$", "").trim();
 }
 
-export function TransactionFilters({ accounts, cards }: { accounts: AccountRow[]; cards: CardRow[] }) {
+export function TransactionFilters({
+  accounts,
+  cards,
+  categories,
+}: {
+  accounts: AccountRow[];
+  cards: CardRow[];
+  categories: CategoryRow[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [minAmountInput, setMinAmountInput] = useState(() => centsParamToInput(searchParams.get("minAmount")));
   const [maxAmountInput, setMaxAmountInput] = useState(() => centsParamToInput(searchParams.get("maxAmount")));
+
+  const categoryId = searchParams.get("categoryId") ?? "";
+  const parentCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
+  const subcategories = useMemo(() => categories.filter((c) => c.parent_id === categoryId), [categories, categoryId]);
 
   function updateParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -128,6 +141,48 @@ export function TransactionFilters({ accounts, cards }: { accounts: AccountRow[]
           {Object.entries(natureLabels).map(([value, label]) => (
             <SelectItem key={value} value={value}>
               {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={categoryId || "all"}
+        onValueChange={(v) => {
+          const params = new URLSearchParams(searchParams.toString());
+          if (v === "all") params.delete("categoryId");
+          else params.set("categoryId", v);
+          params.delete("subcategoryId");
+          params.delete("offset");
+          startTransition(() => {
+            router.push(`${pathname}?${params.toString()}`);
+          });
+        }}
+      >
+        <SelectTrigger className="w-44">
+          <SelectValue placeholder="Categoria" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Todas as categorias</SelectItem>
+          {parentCategories.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={searchParams.get("subcategoryId") ?? "all"}
+        onValueChange={(v) => updateParam("subcategoryId", v === "all" ? "" : v)}
+        disabled={!categoryId || subcategories.length === 0}
+      >
+        <SelectTrigger className="w-44">
+          <SelectValue placeholder="Subcategoria" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Todas as subcategorias</SelectItem>
+          {subcategories.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.name}
             </SelectItem>
           ))}
         </SelectContent>

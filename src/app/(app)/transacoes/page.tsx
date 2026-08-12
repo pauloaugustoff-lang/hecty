@@ -38,6 +38,7 @@ export default async function TransacoesPage({
       accountId: params.accountId,
       cardId: params.cardId,
       categoryId: params.categoryId,
+      subcategoryId: params.subcategoryId,
       nature: params.nature as TransactionNature | undefined,
       search: params.search,
       minAmountCents: params.minAmount ? Number(params.minAmount) : undefined,
@@ -73,7 +74,7 @@ export default async function TransacoesPage({
       />
 
       <Suspense>
-        <TransactionFilters accounts={accounts} cards={cards} />
+        <TransactionFilters accounts={accounts} cards={cards} categories={categories} />
       </Suspense>
 
       {rows.length === 0 ? (

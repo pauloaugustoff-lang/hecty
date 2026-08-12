@@ -29,6 +29,7 @@ export interface TransactionFilters {
   accountId?: string;
   cardId?: string;
   categoryId?: string;
+  subcategoryId?: string;
   nature?: TransactionNature;
   onlyUnclassified?: boolean;
   search?: string;
@@ -96,7 +97,8 @@ export async function listTransactions(
   if (filters.to) query = query.lte("movement_date", filters.to);
   if (filters.accountId) query = query.eq("account_id", filters.accountId);
   if (filters.cardId) query = query.eq("card_id", filters.cardId);
-  if (filters.categoryId) query = query.or(`category_id.eq.${filters.categoryId},subcategory_id.eq.${filters.categoryId}`);
+  if (filters.subcategoryId) query = query.eq("subcategory_id", filters.subcategoryId);
+  else if (filters.categoryId) query = query.eq("category_id", filters.categoryId);
   if (filters.nature) query = query.eq("nature", filters.nature);
   if (filters.onlyUnclassified) query = query.neq("classification_status", "classificado");
   if (filters.search) {
