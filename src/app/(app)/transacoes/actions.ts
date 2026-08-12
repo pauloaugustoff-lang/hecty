@@ -319,6 +319,33 @@ export async function deleteTransactionsAction(transactionIds: string[]): Promis
   return { success: true };
 }
 
+export interface BulkUpdateCategoryInput {
+  transactionIds: string[];
+  categoryId: string | null;
+  subcategoryId: string | null;
+}
+
+export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdateCategoryInput): Promise<ActionState> {
+  if (input.transactionIds.length === 0) return { error: "Nenhum lançamento selecionado." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("transactions")
+    .update({ category_id: input.categoryId, subcategory_id: input.subcategoryId })
+    .eq("space_id", spaceId)
+    .in("id", input.transactionIds);
+
+  if (error) {
+    return { error: "Não foi possível alterar a categoria dos lançamentos selecionados." };
+  }
+
+  revalidatePath("/transacoes");
+  revalidatePath("/visao-geral");
+  revalidatePath("/revisar");
+  revalidatePath("/planejamento");
+  return { success: true };
+}
+
 export interface TransferActionState {
   error?: string;
   success?: boolean;
