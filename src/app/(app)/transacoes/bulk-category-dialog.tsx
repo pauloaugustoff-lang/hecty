@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { Tag } from "lucide-react";
 import { bulkUpdateCategoryAction } from "./actions";
 import type { CategoryRow } from "@/lib/data/categories";
+import type { TransactionNature } from "@/lib/supabase/types";
+import { natureLabels } from "@/lib/domain/labels";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -32,6 +34,7 @@ export function BulkCategoryDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [nature, setNature] = useState<TransactionNature | "">("");
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
 
@@ -44,6 +47,7 @@ export function BulkCategoryDialog({
         transactionIds,
         categoryId: categoryId || null,
         subcategoryId: subcategoryId || null,
+        nature: nature || null,
       });
 
       if (result.error) {
@@ -51,8 +55,9 @@ export function BulkCategoryDialog({
         return;
       }
 
-      toast.success(`Categoria alterada em ${transactionIds.length} lançamento(s)`);
+      toast.success(`Classificação alterada em ${transactionIds.length} lançamento(s)`);
       setOpen(false);
+      setNature("");
       setCategoryId("");
       setSubcategoryId("");
       onDone();
@@ -63,51 +68,73 @@ export function BulkCategoryDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="secondary" size="sm">
-          <Tag className="h-3.5 w-3.5" /> Alterar categoria
+          <Tag className="h-3.5 w-3.5" /> Alterar classificação
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Alterar categoria em massa</DialogTitle>
-          <DialogDescription>Aplica a mesma categoria/subcategoria aos {transactionIds.length} lançamentos selecionados.</DialogDescription>
+          <DialogTitle>Alterar classificação em massa</DialogTitle>
+          <DialogDescription>
+            Aplica a mesma natureza/categoria/subcategoria aos {transactionIds.length} lançamentos selecionados.
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-3">
           <div>
-            <Label htmlFor="bulk-category">Categoria</Label>
-            <Select
-              value={categoryId}
-              onValueChange={(v) => {
-                setCategoryId(v);
-                setSubcategoryId("");
-              }}
-            >
-              <SelectTrigger id="bulk-category">
-                <SelectValue placeholder="Sem categoria" />
+            <Label htmlFor="bulk-nature">Natureza</Label>
+            <Select value={nature || "none"} onValueChange={(v) => setNature(v === "none" ? "" : (v as TransactionNature))}>
+              <SelectTrigger id="bulk-nature">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {parentCategories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
+                <SelectItem value="none">Não alterar natureza</SelectItem>
+                {Object.entries(natureLabels)
+                  .filter(([value]) => value !== "transferencia_entre_contas" && value !== "pagamento_cartao")
+                  .map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label htmlFor="bulk-subcategory">Subcategoria</Label>
-            <Select value={subcategoryId} onValueChange={setSubcategoryId} disabled={!categoryId}>
-              <SelectTrigger id="bulk-subcategory">
-                <SelectValue placeholder="Sem subcategoria" />
-              </SelectTrigger>
-              <SelectContent>
-                {subcategories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="bulk-category">Categoria</Label>
+              <Select
+                value={categoryId}
+                onValueChange={(v) => {
+                  setCategoryId(v);
+                  setSubcategoryId("");
+                }}
+              >
+                <SelectTrigger id="bulk-category">
+                  <SelectValue placeholder="Sem categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {parentCategories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="bulk-subcategory">Subcategoria</Label>
+              <Select value={subcategoryId} onValueChange={setSubcategoryId} disabled={!categoryId}>
+                <SelectTrigger id="bulk-subcategory">
+                  <SelectValue placeholder="Sem subcategoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  {subcategories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 

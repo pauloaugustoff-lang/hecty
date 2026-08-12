@@ -8,6 +8,7 @@ import { computeDedupHash } from "@/lib/import/dedup";
 import { buildTransferPair } from "@/lib/transactions/transfers";
 import { redemptionNature } from "@/lib/money/redemption";
 import { randomUUID } from "node:crypto";
+import type { TransactionNature } from "@/lib/supabase/types";
 
 export interface ActionState {
   error?: string;
@@ -323,20 +324,29 @@ export interface BulkUpdateCategoryInput {
   transactionIds: string[];
   categoryId: string | null;
   subcategoryId: string | null;
+  /** null = não alterar a natureza dos lançamentos selecionados. */
+  nature: TransactionNature | null;
 }
 
 export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdateCategoryInput): Promise<ActionState> {
   if (input.transactionIds.length === 0) return { error: "Nenhum lançamento selecionado." };
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("transactions")
-    .update({ category_id: input.categoryId, subcategory_id: input.subcategoryId })
-    .eq("space_id", spaceId)
-    .in("id", input.transactionIds);
+  const update: {
+    category_id: string | null;
+    subcategory_id: string | null;
+    nature?: TransactionNature;
+    classification_status?: "classificado" | "nao_classificado";
+  } = { category_id: input.categoryId, subcategory_id: input.subcategoryId };
+  if (input.nature) {
+    update.nature = input.nature;
+    update.classification_status = classificationStatusFor(input.nature, Boolean(input.categoryId));
+  }
+
+  const { error } = await supabase.from("transactions").update(update).eq("space_id", spaceId).in("id", input.transactionIds);
 
   if (error) {
-    return { error: "Não foi possível alterar a categoria dos lançamentos selecionados." };
+    return { error: "Não foi possível alterar os lançamentos selecionados." };
   }
 
   revalidatePath("/transacoes");
