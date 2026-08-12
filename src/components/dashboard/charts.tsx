@@ -13,7 +13,7 @@ import {
   LineChart,
   Line,
 } from "recharts";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, ChevronsUpDown } from "lucide-react";
 import { formatCentsToBRL } from "@/lib/money/money";
 import type { MonthlyPoint, CategoryBreakdownPoint } from "@/lib/data/dashboard";
 
@@ -95,12 +95,30 @@ export function ExpenseByCategoryChart({ data }: { data: CategoryBreakdownPoint[
     });
   }
 
+  const expandableIds = top
+    .filter((item) => item.subcategories.length > 1 || (item.subcategories.length === 1 && item.subcategories[0].subcategoryId !== "sem-subcategoria"))
+    .map((item) => item.categoryId);
+  const allExpanded = expandableIds.length > 0 && expandableIds.every((id) => expanded.has(id));
+
+  function toggleAll() {
+    setExpanded(allExpanded ? new Set() : new Set(expandableIds));
+  }
+
   return (
     <div className="space-y-2.5">
+      {expandableIds.length > 0 ? (
+        <button
+          type="button"
+          onClick={toggleAll}
+          className="mb-1 flex items-center gap-1 text-[11px] font-medium text-text-tertiary hover:text-text-secondary"
+        >
+          <ChevronsUpDown className="h-3 w-3" />
+          {allExpanded ? "Recolher todas" : "Expandir todas"}
+        </button>
+      ) : null}
       {top.map((item) => {
         const pct = total > 0 ? (item.amountCents / total) * 100 : 0;
-        const hasSubcategories =
-          item.subcategories.length > 1 || (item.subcategories.length === 1 && item.subcategories[0].subcategoryId !== "sem-subcategoria");
+        const hasSubcategories = expandableIds.includes(item.categoryId);
         const isOpen = expanded.has(item.categoryId);
 
         return (
