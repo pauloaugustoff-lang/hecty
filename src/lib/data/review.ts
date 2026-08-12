@@ -12,7 +12,13 @@ const SELECT_WITH_RELATIONS = `
 
 export async function listReviewTransactions(
   spaceId: string,
-  options?: { search?: string; sortBy?: TransactionSortBy; sortDir?: TransactionSortDir },
+  options?: {
+    search?: string;
+    sortBy?: TransactionSortBy;
+    sortDir?: TransactionSortDir;
+    minAmountCents?: number;
+    maxAmountCents?: number;
+  },
 ): Promise<TransactionWithRelations[]> {
   const supabase = await createClient();
 
@@ -55,6 +61,8 @@ export async function listReviewTransactions(
   if (options?.search) {
     query = query.ilike("normalized_description", `%${options.search.toUpperCase()}%`);
   }
+  if (options?.minAmountCents != null) query = query.gte("amount_cents", options.minAmountCents);
+  if (options?.maxAmountCents != null) query = query.lte("amount_cents", options.maxAmountCents);
 
   const { data, error } = await query;
   if (error) throw error;

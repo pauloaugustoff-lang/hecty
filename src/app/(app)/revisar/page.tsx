@@ -16,9 +16,9 @@ import type { TransactionSortBy, TransactionSortDir } from "@/lib/data/transacti
 export default async function RevisarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string; sortBy?: string; sortDir?: string }>;
+  searchParams: Promise<{ search?: string; sortBy?: string; sortDir?: string; minAmount?: string; maxAmount?: string }>;
 }) {
-  const { search, sortBy, sortDir } = await searchParams;
+  const { search, sortBy, sortDir, minAmount, maxAmount } = await searchParams;
   const space = await requireCurrentSpace();
   const supabase = await createClient();
   const {
@@ -31,6 +31,8 @@ export default async function RevisarPage({
       search,
       sortBy: sortBy as TransactionSortBy | undefined,
       sortDir: sortDir as TransactionSortDir | undefined,
+      minAmountCents: minAmount ? Number(minAmount) : undefined,
+      maxAmountCents: maxAmount ? Number(maxAmount) : undefined,
     }),
     listAccounts(space.id),
     listCards(space.id),
