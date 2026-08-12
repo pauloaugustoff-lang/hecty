@@ -116,38 +116,48 @@ export async function markAsTransferAction(spaceId: string, input: MarkTransferI
 }
 
 export interface MarkCardPaymentInput {
-  transactionId: string;
+  transactionIds: string[];
   cardId: string;
 }
 
 export async function markAsCardPaymentAction(spaceId: string, input: MarkCardPaymentInput): Promise<BulkActionState> {
+  if (input.transactionIds.length === 0) return { error: "Selecione ao menos um lançamento." };
+
   const supabase = await createClient();
 
-  const { data: tx, error: fetchError } = await supabase
+  const { data: txs, error: fetchError } = await supabase
     .from("transactions")
     .select("id, account_id, direction")
-    .eq("id", input.transactionId)
-    .eq("space_id", spaceId)
-    .maybeSingle();
+    .in("id", input.transactionIds)
+    .eq("space_id", spaceId);
 
-  if (fetchError || !tx) {
-    return { error: "Não foi possível localizar o lançamento." };
+  if (fetchError || !txs || txs.length !== input.transactionIds.length) {
+    return { error: "Não foi possível localizar os lançamentos selecionados." };
   }
 
-  if (!tx.account_id || tx.direction !== "saida") {
+  if (txs.some((tx) => !tx.account_id || tx.direction !== "saida")) {
     return { error: "Pagamento de fatura precisa ser uma saída de uma conta (não de outro cartão)." };
   }
 
-  const { error } = await supabase
+  const accountIds = new Set(txs.map((tx) => tx.account_id));
+  if (accountIds.size > 1) {
+    return { error: "Selecione lançamentos da mesma conta — cada pagamento de fatura sai de uma única conta." };
+  }
+
+  const { error, count } = await supabase
     .from("transactions")
-    .update({
-      nature: "pagamento_cartao",
-      paid_card_id: input.cardId,
-      category_id: null,
-      subcategory_id: null,
-      classification_status: "classificado",
-    })
-    .eq("id", tx.id);
+    .update(
+      {
+        nature: "pagamento_cartao",
+        paid_card_id: input.cardId,
+        category_id: null,
+        subcategory_id: null,
+        classification_status: "classificado",
+      },
+      { count: "exact" },
+    )
+    .in("id", input.transactionIds)
+    .eq("space_id", spaceId);
 
   if (error) {
     return { error: "Não foi possível marcar como pagamento de fatura." };
@@ -157,7 +167,7 @@ export async function markAsCardPaymentAction(spaceId: string, input: MarkCardPa
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
   revalidatePath("/cartoes");
-  return { success: true, updatedCount: 1 };
+  return { success: true, updatedCount: count ?? input.transactionIds.length };
 }
 
 export interface DecomposeRedemptionInput {

@@ -105,13 +105,12 @@ export function ReviewTable({
   }
 
   function handleMarkCardPayment() {
-    if (selected.size !== 1 || !cardPaymentCardId) return;
-    const [transactionId] = Array.from(selected);
+    if (selected.size === 0 || !cardPaymentCardId) return;
     startTransition(async () => {
-      const result = await markAsCardPaymentAction(spaceId, { transactionId, cardId: cardPaymentCardId });
+      const result = await markAsCardPaymentAction(spaceId, { transactionIds: Array.from(selected), cardId: cardPaymentCardId });
       if (result.error) toast.error(result.error);
       else {
-        toast.success("Marcado como pagamento de fatura");
+        toast.success(`${result.updatedCount} lançamento(s) marcado(s) como pagamento de fatura`);
         setSelected(new Set());
         setCardPaymentCardId("");
       }
@@ -143,7 +142,7 @@ export function ReviewTable({
               <ArrowLeftRight className="h-3.5 w-3.5" /> Marcar como transferência
             </Button>
           ) : null}
-          {selected.size === 1 && cards.length > 0 ? (
+          {selected.size >= 1 && cards.length > 0 ? (
             <div className="flex items-center gap-1.5">
               <Select value={cardPaymentCardId || "choose"} onValueChange={(v) => setCardPaymentCardId(v === "choose" ? "" : v)}>
                 <SelectTrigger className="h-8 w-40 text-[13px]">
