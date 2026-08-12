@@ -4,14 +4,20 @@ import type { Database, TransactionNature } from "@/lib/supabase/types";
 export type TransactionRow = Database["public"]["Tables"]["transactions"]["Row"];
 export type RedemptionRow = Database["public"]["Tables"]["redemption_details"]["Row"];
 
+export interface LinkedExpenseSummary {
+  expense_transaction_id: string;
+  allocated_amount_cents: number;
+  expense: { id: string; original_description: string; amount_cents: number } | null;
+}
+
 export interface TransactionWithRelations extends TransactionRow {
   account: { id: string; name: string; color: string } | null;
   card: { id: string; name: string } | null;
   category: { id: string; name: string; color: string } | null;
   subcategory: { id: string; name: string } | null;
   redemption: RedemptionRow | null;
-  /** Preenchido quando nature = "reembolso" e há vínculo com a despesa reembolsada. */
-  linked_expense: { id: string; original_description: string; amount_cents: number } | null;
+  /** Preenchido quando nature = "reembolso"/"estorno": despesas cobertas por este lançamento. */
+  reimbursement_links: LinkedExpenseSummary[];
 }
 
 export type TransactionSortBy = "date" | "value" | "description" | "account" | "category" | "nature";
@@ -41,7 +47,11 @@ const SELECT_WITH_RELATIONS = `
   category:categories!transactions_category_id_fkey(id, name, color),
   subcategory:categories!transactions_subcategory_id_fkey(id, name),
   redemption:redemption_details(*),
-  linked_expense:transactions!linked_transaction_id(id, original_description, amount_cents)
+  reimbursement_links:transaction_reimbursement_links!reimbursement_transaction_id(
+    expense_transaction_id,
+    allocated_amount_cents,
+    expense:transactions!expense_transaction_id(id, original_description, amount_cents)
+  )
 `;
 
 export async function listTransactions(

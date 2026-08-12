@@ -184,6 +184,15 @@ export type RedemptionDetailsRow = {
   updated_at: string;
 }
 
+export type TransactionReimbursementLinkRow = {
+  id: string;
+  space_id: string;
+  reimbursement_transaction_id: string;
+  expense_transaction_id: string;
+  allocated_amount_cents: number;
+  created_at: string;
+}
+
 export type ImportBatchRow = {
   id: string;
   space_id: string;
@@ -344,6 +353,17 @@ export type Database = {
         Row: RedemptionDetailsRow;
         Insert: Partial<RedemptionDetailsRow> & { transaction_id: string; space_id: string; total_amount_cents: number };
         Update: Partial<RedemptionDetailsRow>;
+        Relationships: [];
+      };
+      transaction_reimbursement_links: {
+        Row: TransactionReimbursementLinkRow;
+        Insert: Partial<TransactionReimbursementLinkRow> & {
+          space_id: string;
+          reimbursement_transaction_id: string;
+          expense_transaction_id: string;
+          allocated_amount_cents: number;
+        };
+        Update: Partial<TransactionReimbursementLinkRow>;
         Relationships: [];
       };
       import_batches: {

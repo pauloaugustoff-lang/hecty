@@ -3,6 +3,8 @@ import { computeDashboardMetrics, type DashboardTransactionInput, type Dashboard
 import { analyzeRedemption } from "@/lib/money/redemption";
 import { format, startOfMonth, subMonths } from "date-fns";
 
+const REIMBURSING_NATURES = ["reembolso", "estorno"] as const;
+
 interface RawTx {
   id: string;
   amount_cents: number;
@@ -15,7 +17,6 @@ interface RawTx {
   category: { name: string; color: string } | null;
   subcategory_id: string | null;
   subcategory: { name: string; color: string } | null;
-  linked_transaction_id: string | null;
   // redemption_details.transaction_id é chave primária (relação 1:1), então
   // o PostgREST retorna um objeto único aqui, não um array.
   redemption_details: {
@@ -38,7 +39,7 @@ async function fetchTransactions(spaceId: string, from: string, to: string): Pro
   const { data, error } = await supabase
     .from("transactions")
     .select(
-      "id, amount_cents, direction, nature, classification_status, movement_date, competence_date, category_id, category:categories!transactions_category_id_fkey(name, color), subcategory_id, subcategory:categories!transactions_subcategory_id_fkey(name, color), linked_transaction_id, redemption_details(*)",
+      "id, amount_cents, direction, nature, classification_status, movement_date, competence_date, category_id, category:categories!transactions_category_id_fkey(name, color), subcategory_id, subcategory:categories!transactions_subcategory_id_fkey(name, color), redemption_details(*)",
     )
     .eq("space_id", spaceId)
     .is("deleted_at", null)
@@ -47,33 +48,33 @@ async function fetchTransactions(spaceId: string, from: string, to: string): Pro
 
   if (error) throw error;
   const rows = (data as unknown as RawTx[]) ?? [];
-  return applyReembolsoAbatement(spaceId, rows);
+  return applyReimbursementAbatement(spaceId, rows);
 }
 
-// Um reembolso vinculado a uma despesa (ex.: mãe reembolsa metade do plano de
-// saúde) abate o valor daquela despesa em vez de só contar como receita à
-// parte — senão a categoria mostraria o gasto bruto, não o custo real. O
-// reembolso pode ter acontecido em outro mês/período que a despesa original,
-// então buscamos os vínculos separadamente, não filtrados por competence_date.
-async function applyReembolsoAbatement(spaceId: string, rows: RawTx[]): Promise<RawTx[]> {
+// Um reembolso/estorno vinculado a uma ou mais despesas (ex.: mãe reembolsa
+// metade do plano de saúde, ou uma única transferência cobre dois boletos)
+// abate o valor de cada despesa em vez de só contar como receita à parte —
+// senão a categoria mostraria o gasto bruto, não o custo real. O vínculo
+// pode atravessar períodos (despesa em junho, reembolso em julho), então a
+// consulta abaixo não é filtrada por competence_date.
+async function applyReimbursementAbatement(spaceId: string, rows: RawTx[]): Promise<RawTx[]> {
   const despesaIds = rows.filter((r) => r.nature === "despesa").map((r) => r.id);
   if (despesaIds.length === 0) return rows;
 
   const supabase = await createClient();
-  const { data: linkedReembolsos } = await supabase
-    .from("transactions")
-    .select("amount_cents, linked_transaction_id")
+  const { data: links } = await supabase
+    .from("transaction_reimbursement_links")
+    .select("expense_transaction_id, allocated_amount_cents, reimbursement_transaction_id")
     .eq("space_id", spaceId)
-    .eq("nature", "reembolso")
-    .is("deleted_at", null)
-    .in("linked_transaction_id", despesaIds);
+    .in("expense_transaction_id", despesaIds);
 
-  if (!linkedReembolsos?.length) return rows;
+  if (!links?.length) return rows;
 
   const reductionByDespesaId = new Map<string, number>();
-  for (const r of linkedReembolsos) {
-    if (!r.linked_transaction_id) continue;
-    reductionByDespesaId.set(r.linked_transaction_id, (reductionByDespesaId.get(r.linked_transaction_id) ?? 0) + r.amount_cents);
+  const reimbursementIds = new Set<string>();
+  for (const link of links) {
+    reductionByDespesaId.set(link.expense_transaction_id, (reductionByDespesaId.get(link.expense_transaction_id) ?? 0) + link.allocated_amount_cents);
+    reimbursementIds.add(link.reimbursement_transaction_id);
   }
 
   return rows
@@ -83,10 +84,10 @@ async function applyReembolsoAbatement(spaceId: string, rows: RawTx[]): Promise<
       }
       return row;
     })
-    // Remove reembolsos já contabilizados acima (via redução na despesa) que
-    // por acaso também caíram dentro deste mesmo período consultado — senão
-    // contariam duas vezes: uma como redução, outra como receita própria.
-    .filter((row) => !(row.nature === "reembolso" && row.linked_transaction_id && reductionByDespesaId.has(row.linked_transaction_id)));
+    // Remove reembolsos/estornos já contabilizados acima (via redução na
+    // despesa) que por acaso também caíram neste mesmo período consultado —
+    // senão contariam duas vezes: uma como redução, outra como receita própria.
+    .filter((row) => !((REIMBURSING_NATURES as readonly string[]).includes(row.nature) && reimbursementIds.has(row.id)));
 }
 
 function toDashboardInput(tx: RawTx): DashboardTransactionInput {

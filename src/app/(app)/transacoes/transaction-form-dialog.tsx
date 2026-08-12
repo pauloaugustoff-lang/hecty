@@ -90,14 +90,16 @@ export function TransactionFormDialog({
   // sobrescrever silenciosamente assim que o diálogo abre.
   const [competenceDateTouched, setCompetenceDateTouched] = useState(Boolean(transaction));
 
-  const [linkedExpense, setLinkedExpense] = useState<{ id: string; original_description: string; amount_cents: number } | null>(
-    transaction?.linked_expense ?? null,
+  const [linkedExpenses, setLinkedExpenses] = useState<{ id: string; original_description: string; amount_cents: number }[]>(
+    () => (transaction?.reimbursement_links ?? []).map((l) => l.expense).filter((e): e is { id: string; original_description: string; amount_cents: number } => Boolean(e)),
   );
   const [expenseSearch, setExpenseSearch] = useState("");
   const [expenseResults, setExpenseResults] = useState<ExpenseSearchResult[]>([]);
   const [isSearchingExpense, setIsSearchingExpense] = useState(false);
 
   const isRedemption = nature === "resgate_investimento" || nature === "resgate_a_decompor";
+  const isReimbursing = nature === "reembolso" || nature === "estorno";
+  const linkedExpensesTotal = linkedExpenses.reduce((sum, e) => sum + e.amount_cents, 0);
   const parentCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
   const subcategories = useMemo(
     () => categories.filter((c) => c.parent_id === categoryId),
@@ -121,7 +123,7 @@ export function TransactionFormDialog({
   }, [selectedCard, movementDate, competenceDateTouched]);
 
   useEffect(() => {
-    if (nature !== "reembolso" || !expenseSearch.trim()) {
+    if (!isReimbursing || !expenseSearch.trim()) {
       setExpenseResults([]);
       return;
     }
@@ -132,7 +134,7 @@ export function TransactionFormDialog({
         .finally(() => setIsSearchingExpense(false));
     }, 300);
     return () => clearTimeout(timeout);
-  }, [nature, expenseSearch, spaceId]);
+  }, [isReimbursing, expenseSearch, spaceId]);
 
   useEffect(() => {
     if (state.success) {
@@ -181,7 +183,9 @@ export function TransactionFormDialog({
           <input type="hidden" name="cardId" value={cardId} />
           <input type="hidden" name="categoryId" value={categoryId} />
           <input type="hidden" name="subcategoryId" value={subcategoryId} />
-          <input type="hidden" name="linkedTransactionId" value={linkedExpense?.id ?? ""} />
+          {linkedExpenses.map((e) => (
+            <input key={e.id} type="hidden" name="linkedExpenseIds" value={e.id} />
+          ))}
 
           <div className="flex gap-1 rounded-[var(--radius-md)] border border-border p-1">
             {(["saida", "entrada"] as const).map((d) => (
@@ -282,47 +286,58 @@ export function TransactionFormDialog({
               </Select>
             </div>
 
-            {nature === "reembolso" ? (
+            {isReimbursing ? (
               <div className="col-span-2">
-                <Label>Qual despesa isso reembolsa?</Label>
-                {linkedExpense ? (
-                  <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-border bg-surface-raised px-3 py-2 text-sm">
-                    <span className="text-text-primary">
-                      {linkedExpense.original_description} — {formatCentsToBRL(linkedExpense.amount_cents)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setLinkedExpense(null)}
-                      aria-label="Remover vínculo"
-                      className="text-text-tertiary hover:text-text-primary"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                <Label>{nature === "estorno" ? "Qual(is) despesa(s) isso estorna?" : "Qual(is) despesa(s) isso reembolsa?"}</Label>
+
+                {linkedExpenses.length > 0 ? (
+                  <div className="mb-2 space-y-1.5">
+                    {linkedExpenses.map((e) => (
+                      <div
+                        key={e.id}
+                        className="flex items-center justify-between rounded-[var(--radius-sm)] border border-border bg-surface-raised px-3 py-2 text-sm"
+                      >
+                        <span className="text-text-primary">
+                          {e.original_description} — {formatCentsToBRL(e.amount_cents)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setLinkedExpenses((prev) => prev.filter((x) => x.id !== e.id))}
+                          aria-label={`Remover vínculo com ${e.original_description}`}
+                          className="text-text-tertiary hover:text-text-primary"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ) : (
+                ) : null}
+
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
+                  <Input
+                    value={expenseSearch}
+                    onChange={(e) => setExpenseSearch(e.target.value)}
+                    placeholder="Buscar mais uma despesa pela descrição…"
+                    className="pl-8"
+                  />
+                </div>
+                {expenseSearch.trim() ? (
                   <div className="relative">
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
-                      <Input
-                        value={expenseSearch}
-                        onChange={(e) => setExpenseSearch(e.target.value)}
-                        placeholder="Buscar pela descrição da despesa…"
-                        className="pl-8"
-                      />
-                    </div>
-                    {expenseSearch.trim() ? (
-                      <div className="absolute z-10 mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface-overlay shadow-[var(--shadow-md)]">
-                        {isSearchingExpense ? (
-                          <p className="px-3 py-2 text-[13px] text-text-tertiary">Buscando…</p>
-                        ) : expenseResults.length === 0 ? (
-                          <p className="px-3 py-2 text-[13px] text-text-tertiary">Nenhuma despesa encontrada.</p>
-                        ) : (
-                          expenseResults.map((r) => (
+                    <div className="absolute z-10 mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface-overlay shadow-[var(--shadow-md)]">
+                      {isSearchingExpense ? (
+                        <p className="px-3 py-2 text-[13px] text-text-tertiary">Buscando…</p>
+                      ) : expenseResults.filter((r) => !linkedExpenses.some((e) => e.id === r.id)).length === 0 ? (
+                        <p className="px-3 py-2 text-[13px] text-text-tertiary">Nenhuma despesa encontrada.</p>
+                      ) : (
+                        expenseResults
+                          .filter((r) => !linkedExpenses.some((e) => e.id === r.id))
+                          .map((r) => (
                             <button
                               key={r.id}
                               type="button"
                               onClick={() => {
-                                setLinkedExpense({ id: r.id, original_description: r.originalDescription, amount_cents: r.amountCents });
+                                setLinkedExpenses((prev) => [...prev, { id: r.id, original_description: r.originalDescription, amount_cents: r.amountCents }]);
                                 setExpenseSearch("");
                                 setExpenseResults([]);
                               }}
@@ -335,14 +350,21 @@ export function TransactionFormDialog({
                               <span className="tabular text-text-secondary">{formatCentsToBRL(r.amountCents)}</span>
                             </button>
                           ))
-                        )}
-                      </div>
-                    ) : null}
+                      )}
+                    </div>
                   </div>
-                )}
+                ) : null}
+
                 <p className="mt-1.5 text-[11px] text-text-tertiary">
-                  Vinculando, o valor deste reembolso abate o gasto daquela categoria — não fica só contando como receita à parte.
+                  Vinculando, o valor de cada despesa selecionada é abatido daquela categoria — não fica só contando como receita à parte.
+                  Dá pra selecionar mais de uma (ex.: uma transferência de R$200 cobrindo dois boletos de R$100).
                 </p>
+                {linkedExpenses.length > 0 && amountCents > 0 && linkedExpensesTotal !== amountCents ? (
+                  <Callout tone="warning" className="mt-2">
+                    Despesas selecionadas somam {formatCentsToBRL(linkedExpensesTotal)}, mas este lançamento é de{" "}
+                    {formatCentsToBRL(amountCents)}. Confira se está certo.
+                  </Callout>
+                ) : null}
               </div>
             ) : null}
 

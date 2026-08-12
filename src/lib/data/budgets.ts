@@ -37,17 +37,14 @@ export async function getActualSpendByCategory(
   const reductionByDespesaId = new Map<string, number>();
 
   if (despesaIds.length > 0) {
-    const { data: linkedReembolsos } = await supabase
-      .from("transactions")
-      .select("amount_cents, linked_transaction_id")
+    const { data: links } = await supabase
+      .from("transaction_reimbursement_links")
+      .select("expense_transaction_id, allocated_amount_cents")
       .eq("space_id", spaceId)
-      .eq("nature", "reembolso")
-      .is("deleted_at", null)
-      .in("linked_transaction_id", despesaIds);
+      .in("expense_transaction_id", despesaIds);
 
-    for (const r of linkedReembolsos ?? []) {
-      if (!r.linked_transaction_id) continue;
-      reductionByDespesaId.set(r.linked_transaction_id, (reductionByDespesaId.get(r.linked_transaction_id) ?? 0) + r.amount_cents);
+    for (const link of links ?? []) {
+      reductionByDespesaId.set(link.expense_transaction_id, (reductionByDespesaId.get(link.expense_transaction_id) ?? 0) + link.allocated_amount_cents);
     }
   }
 

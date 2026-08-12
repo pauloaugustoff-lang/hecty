@@ -55,12 +55,13 @@ function classificationStatusFor(nature: string, hasCategory: boolean): "classif
   return hasCategory ? "classificado" : "nao_classificado";
 }
 
+const REIMBURSING_NATURES = new Set(["reembolso", "estorno"]);
+
 function parseTransactionFormData(formData: FormData) {
   const accountId = formData.get("accountId");
   const cardId = formData.get("cardId");
   const categoryId = formData.get("categoryId");
   const subcategoryId = formData.get("subcategoryId");
-  const linkedTransactionId = formData.get("linkedTransactionId");
 
   return transactionFormSchema.safeParse({
     movementDate: formData.get("movementDate"),
@@ -76,8 +77,35 @@ function parseTransactionFormData(formData: FormData) {
     counterparty: formData.get("counterparty") ?? "",
     notes: formData.get("notes") ?? "",
     tags: [],
-    linkedTransactionId: linkedTransactionId ? String(linkedTransactionId) : null,
+    linkedExpenseIds: formData.getAll("linkedExpenseIds").map(String),
   });
+}
+
+/** Substitui os vínculos de um reembolso/estorno pelas despesas selecionadas
+ * — cada uma abatida pelo próprio valor cheio. Fora dessas naturezas,
+ * qualquer vínculo antigo (ex.: usuário trocou a natureza) é removido. */
+async function syncReimbursementLinks(
+  transactionId: string,
+  spaceId: string,
+  nature: string,
+  expenseIds: string[],
+) {
+  const supabase = await createClient();
+  await supabase.from("transaction_reimbursement_links").delete().eq("reimbursement_transaction_id", transactionId);
+
+  if (!REIMBURSING_NATURES.has(nature) || expenseIds.length === 0) return;
+
+  const { data: expenses } = await supabase.from("transactions").select("id, amount_cents").in("id", expenseIds);
+  if (!expenses?.length) return;
+
+  await supabase.from("transaction_reimbursement_links").insert(
+    expenses.map((e) => ({
+      space_id: spaceId,
+      reimbursement_transaction_id: transactionId,
+      expense_transaction_id: e.id,
+      allocated_amount_cents: e.amount_cents,
+    })),
+  );
 }
 
 export async function createTransactionAction(
@@ -122,7 +150,6 @@ export async function createTransactionAction(
       origin: "manual",
       classification_status: classificationStatusFor(parsed.data.nature, Boolean(parsed.data.categoryId)),
       dedup_hash: dedupHash,
-      linked_transaction_id: parsed.data.nature === "reembolso" ? parsed.data.linkedTransactionId : null,
     })
     .select("id")
     .single();
@@ -134,6 +161,7 @@ export async function createTransactionAction(
   if (parsed.data.nature === "resgate_investimento" || parsed.data.nature === "resgate_a_decompor") {
     await upsertRedemptionFromFormData(inserted.id, spaceId, parsed.data.amountCents, formData);
   }
+  await syncReimbursementLinks(inserted.id, spaceId, parsed.data.nature, parsed.data.linkedExpenseIds ?? []);
 
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
@@ -183,7 +211,6 @@ export async function updateTransactionAction(
       notes: parsed.data.notes,
       classification_status: classificationStatusFor(parsed.data.nature, Boolean(parsed.data.categoryId)),
       dedup_hash: dedupHash,
-      linked_transaction_id: parsed.data.nature === "reembolso" ? parsed.data.linkedTransactionId : null,
     })
     .eq("id", transactionId);
 
@@ -196,6 +223,7 @@ export async function updateTransactionAction(
   } else {
     await supabase.from("redemption_details").delete().eq("transaction_id", transactionId);
   }
+  await syncReimbursementLinks(transactionId, spaceId, parsed.data.nature, parsed.data.linkedExpenseIds ?? []);
 
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
