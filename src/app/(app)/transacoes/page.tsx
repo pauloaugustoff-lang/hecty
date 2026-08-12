@@ -40,6 +40,8 @@ export default async function TransacoesPage({
       categoryId: params.categoryId,
       nature: params.nature as TransactionNature | undefined,
       search: params.search,
+      minAmountCents: params.minAmount ? Number(params.minAmount) : undefined,
+      maxAmountCents: params.maxAmount ? Number(params.maxAmount) : undefined,
       limit: PAGE_SIZE,
       offset,
       sortBy: params.sortBy as TransactionSortBy | undefined,

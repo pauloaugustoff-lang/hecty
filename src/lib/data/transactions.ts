@@ -26,6 +26,8 @@ export interface TransactionFilters {
   nature?: TransactionNature;
   onlyUnclassified?: boolean;
   search?: string;
+  minAmountCents?: number;
+  maxAmountCents?: number;
   limit?: number;
   offset?: number;
   sortBy?: TransactionSortBy;
@@ -90,6 +92,8 @@ export async function listTransactions(
   if (filters.search) {
     query = query.ilike("normalized_description", `%${filters.search.toUpperCase()}%`);
   }
+  if (filters.minAmountCents != null) query = query.gte("amount_cents", filters.minAmountCents);
+  if (filters.maxAmountCents != null) query = query.lte("amount_cents", filters.maxAmountCents);
 
   const limit = filters.limit ?? 50;
   const offset = filters.offset ?? 0;
