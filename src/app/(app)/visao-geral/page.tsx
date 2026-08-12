@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { requireCurrentSpace } from "@/lib/spaces/current-space";
-import { getDashboardMetrics, getMonthlySeries, getExpenseBreakdown, getRevenueBreakdown } from "@/lib/data/dashboard";
+import { getDashboardMetrics, getMonthlySeries, getExpenseBreakdown, getRevenueBreakdown, getInvestmentBreakdown } from "@/lib/data/dashboard";
 import { formatCentsToBRL } from "@/lib/money/money";
 import { PageHeader } from "@/components/layout/page-header";
 import { KpiBand, type KpiItem } from "@/components/dashboard/kpi-band";
@@ -28,12 +28,13 @@ export default async function VisaoGeralPage({
   const prevFrom = format(startOfMonth(prevMonth), "yyyy-MM-dd");
   const prevTo = format(endOfMonth(prevMonth), "yyyy-MM-dd");
 
-  const [metrics, prevMetrics, monthlySeries, expenseBreakdown, revenueBreakdown] = await Promise.all([
+  const [metrics, prevMetrics, monthlySeries, expenseBreakdown, revenueBreakdown, investmentBreakdown] = await Promise.all([
     getDashboardMetrics(space.id, from, to),
     getDashboardMetrics(space.id, prevFrom, prevTo),
     getMonthlySeries(space.id, 6),
     getExpenseBreakdown(space.id, from, to),
     getRevenueBreakdown(space.id, from, to),
+    getInvestmentBreakdown(space.id, from, to),
   ]);
 
   function delta(current: number, previous: number): string | undefined {
@@ -117,6 +118,12 @@ export default async function VisaoGeralPage({
           <h2 className="mb-1 font-display text-base font-medium text-text-primary">Receitas por categoria</h2>
           <p className="mb-3 text-[13px] text-text-secondary">De onde veio o dinheiro no período.</p>
           <CategoryBreakdownChart data={revenueBreakdown} emptyMessage="Nenhuma receita classificada no período." />
+        </div>
+
+        <div className="rounded-[var(--radius-lg)] border border-border-subtle p-6">
+          <h2 className="mb-1 font-display text-base font-medium text-text-primary">Investimentos por categoria</h2>
+          <p className="mb-3 text-[13px] text-text-secondary">Onde o dinheiro foi aplicado no período.</p>
+          <CategoryBreakdownChart data={investmentBreakdown} emptyMessage="Nenhuma aplicação classificada no período." />
         </div>
 
         <div className="rounded-[var(--radius-lg)] border border-border-subtle p-6">

@@ -225,3 +225,8 @@ export async function getRevenueBreakdown(spaceId: string, from: string, to: str
   const revenueNatures = new Set<string>(REVENUE_NATURES);
   return buildCategoryBreakdown(rows, "entrada", (nature) => revenueNatures.has(nature));
 }
+
+export async function getInvestmentBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
+  const rows = await fetchTransactions(spaceId, from, to);
+  return buildCategoryBreakdown(rows, "saida", (nature) => nature === "aplicacao_financeira");
+}
