@@ -117,14 +117,16 @@ export async function stageImportBatchAction(spaceId: string, input: StageInput)
 
   const buffer = await downloadImportFile(supabase, input.storagePath);
 
+  const isCardImport = Boolean(input.cardId);
+
   let candidates: NormalizedCandidate[];
   if (input.sourceType === "csv") {
     const text = new TextDecoder("utf-8").decode(buffer);
     const table = parseCsv(text);
-    candidates = normalizeTableRows(table, input.mapping!);
+    candidates = normalizeTableRows(table, input.mapping!, isCardImport);
   } else if (input.sourceType === "xlsx") {
     const table = await parseXlsx(buffer);
-    candidates = normalizeTableRows(table, input.mapping!);
+    candidates = normalizeTableRows(table, input.mapping!, isCardImport);
   } else {
     const text = new TextDecoder("utf-8").decode(buffer);
     candidates = normalizeOfxRows(parseOfx(text));

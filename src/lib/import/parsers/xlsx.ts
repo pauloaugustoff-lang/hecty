@@ -7,10 +7,16 @@ export async function parseXlsx(buffer: ArrayBuffer): Promise<ParsedTable> {
   const sheet = workbook.worksheets[0];
   if (!sheet) return { headers: [], rows: [] };
 
+  // includeEmpty é necessário aqui: planilhas com uma coluna A em branco antes
+  // dos cabeçalhos de verdade (comum em faturas de cartão exportadas) fariam
+  // essa coluna nunca ser visitada com includeEmpty:false, deixando um buraco
+  // no início do array — e Array.prototype.find (usado depois em
+  // findHeaderMatch) não pula buracos como forEach/map, então quebrava com
+  // um TypeError ao tentar ler .norm de um item inexistente.
   const headerRow = sheet.getRow(1);
   const headers: string[] = [];
-  headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-    headers[colNumber - 1] = String(cell.value ?? `Coluna ${colNumber}`).trim();
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber - 1] = String(cell.value ?? `Coluna ${colNumber}`).trim() || `Coluna ${colNumber}`;
   });
 
   const rows: Record<string, string>[] = [];

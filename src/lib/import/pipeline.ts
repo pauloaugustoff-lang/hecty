@@ -12,19 +12,26 @@ export interface ColumnMapping {
 }
 
 const DATE_HEADER_HINTS = ["data", "date", "dt_lancamento", "data lancamento", "data lançamento"];
-const DESCRIPTION_HEADER_HINTS = ["descricao", "descrição", "description", "historico", "histórico", "memo", "detalhe"];
+const DESCRIPTION_HEADER_HINTS = ["descricao", "descrição", "description", "historico", "histórico", "memo", "detalhe", "lancamento", "lançamento"];
 const AMOUNT_HEADER_HINTS = ["valor", "amount", "vlr", "value"];
 const DIRECTION_HEADER_HINTS = ["tipo", "type", "direcao", "direção", "d/c", "natureza"];
+// "tipo"/"type" só valem como cabeçalho EXATO ("Tipo"), nunca por substring:
+// senão "Tipo do cartão" (Físico/Virtual, comum em faturas de cartão) seria
+// confundido com uma coluna de direção D/C.
+const DIRECTION_PARTIAL_HINTS = ["direcao", "direção", "d/c", "natureza"];
 const EXTERNAL_ID_HEADER_HINTS = ["id", "identificador", "fitid", "documento", "num_doc"];
 
-function findHeaderMatch(headers: string[], hints: string[]): string | undefined {
-  const normalized = headers.map((h) => ({ raw: h, norm: normalizeDescription(h) }));
+function findHeaderMatch(headers: string[], hints: string[], partialHints: string[] = hints): string | undefined {
+  // Defensivo contra buracos em arrays esparsos: find()/findIndex() não pulam
+  // índices ausentes como forEach/map/filter pulam, então visitariam um
+  // "undefined" e quebrariam ao acessar .norm nele.
+  const normalized = headers.filter((h): h is string => Boolean(h)).map((h) => ({ raw: h, norm: normalizeDescription(h) }));
   for (const hint of hints) {
     const hintNorm = normalizeDescription(hint);
     const exact = normalized.find((h) => h.norm === hintNorm);
     if (exact) return exact.raw;
   }
-  for (const hint of hints) {
+  for (const hint of partialHints) {
     const hintNorm = normalizeDescription(hint);
     const partial = normalized.find((h) => h.norm.includes(hintNorm));
     if (partial) return partial.raw;
@@ -37,7 +44,7 @@ export function suggestMapping(headers: string[]): Partial<ColumnMapping> {
     date: findHeaderMatch(headers, DATE_HEADER_HINTS),
     description: findHeaderMatch(headers, DESCRIPTION_HEADER_HINTS),
     amount: findHeaderMatch(headers, AMOUNT_HEADER_HINTS),
-    direction: findHeaderMatch(headers, DIRECTION_HEADER_HINTS),
+    direction: findHeaderMatch(headers, DIRECTION_HEADER_HINTS, DIRECTION_PARTIAL_HINTS),
     externalId: findHeaderMatch(headers, EXTERNAL_ID_HEADER_HINTS),
   };
 }
@@ -75,7 +82,11 @@ export interface NormalizedCandidate {
   error: string | null;
 }
 
-function amountToCandidateFields(amountRaw: string, directionRaw?: string): { amountCents: number | null; direction: "entrada" | "saida" | null } {
+function amountToCandidateFields(
+  amountRaw: string,
+  directionRaw: string | undefined,
+  isCardImport: boolean,
+): { amountCents: number | null; direction: "entrada" | "saida" | null } {
   let cents: number;
   try {
     cents = parseBRLToCents(amountRaw);
@@ -91,10 +102,18 @@ function amountToCandidateFields(amountRaw: string, directionRaw?: string): { am
     if (isCredit) return { amountCents: Math.abs(cents), direction: "entrada" };
   }
 
+  // Fatura de cartão: a esmagadora maioria dos arquivos lista compras como
+  // valores positivos sem sinal (não é um extrato com débitos e créditos
+  // misturados) — por isso o padrão aqui é saída, com estorno/crédito só
+  // quando o arquivo realmente traz o valor negativo.
+  if (isCardImport) {
+    return { amountCents: Math.abs(cents), direction: cents < 0 ? "entrada" : "saida" };
+  }
+
   return { amountCents: Math.abs(cents), direction: cents < 0 ? "saida" : "entrada" };
 }
 
-export function normalizeTableRows(table: ParsedTable, mapping: ColumnMapping): NormalizedCandidate[] {
+export function normalizeTableRows(table: ParsedTable, mapping: ColumnMapping, isCardImport = false): NormalizedCandidate[] {
   return table.rows.map((row, index) => {
     const dateRaw = row[mapping.date] ?? "";
     const descriptionRaw = row[mapping.description] ?? "";
@@ -103,7 +122,7 @@ export function normalizeTableRows(table: ParsedTable, mapping: ColumnMapping): 
     const externalId = mapping.externalId ? row[mapping.externalId]?.trim() || null : null;
 
     const movementDate = parseFlexibleDate(dateRaw);
-    const { amountCents, direction } = amountToCandidateFields(amountRaw, directionRaw);
+    const { amountCents, direction } = amountToCandidateFields(amountRaw, directionRaw, isCardImport);
     const installment = extractInstallment(descriptionRaw);
 
     let error: string | null = null;

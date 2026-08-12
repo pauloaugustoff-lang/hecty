@@ -22,6 +22,11 @@ describe("suggestMapping", () => {
     const mapping = suggestMapping(["Coluna A", "Coluna B"]);
     expect(mapping.date).toBeUndefined();
   });
+
+  it("não confunde 'Tipo do cartão' (Físico/Virtual) com coluna de direção D/C", () => {
+    const mapping = suggestMapping(["Data", "Lançamento", "Valor", "Tipo do cartão"]);
+    expect(mapping.direction).toBeUndefined();
+  });
 });
 
 describe("parseFlexibleDate", () => {
@@ -84,6 +89,24 @@ describe("normalizeTableRows", () => {
     const [row] = normalizeTableRows(withDirection, { ...mapping, direction: "Tipo" });
     expect(row.direction).toBe("saida");
     expect(row.amountCents).toBe(5000);
+  });
+
+  it("sem coluna de direção, importação de fatura de cartão assume valor positivo como saída", () => {
+    const cardStatement: ParsedTable = {
+      headers: ["Data", "Histórico", "Valor"],
+      rows: [
+        { Data: "08/07/2026", Histórico: "SUPERMERCADO", Valor: "150,00" },
+        { Data: "09/07/2026", Histórico: "ESTORNO LOJA X", Valor: "-30,00" },
+      ],
+    };
+    const [purchase, refund] = normalizeTableRows(cardStatement, mapping, /* isCardImport */ true);
+    expect(purchase.direction).toBe("saida");
+    expect(refund.direction).toBe("entrada");
+  });
+
+  it("sem coluna de direção, importação de conta mantém positivo como entrada (comportamento anterior)", () => {
+    const [, second] = normalizeTableRows(table, mapping, /* isCardImport */ false);
+    expect(second.direction).toBe("entrada");
   });
 });
 
