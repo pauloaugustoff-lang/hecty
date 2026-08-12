@@ -11,9 +11,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CheckCircle2 } from "lucide-react";
 import { ReviewTable } from "./review-table";
 import { ReviewSearch } from "./review-search";
+import type { TransactionSortBy, TransactionSortDir } from "@/lib/data/transactions";
 
-export default async function RevisarPage({ searchParams }: { searchParams: Promise<{ search?: string }> }) {
-  const { search } = await searchParams;
+export default async function RevisarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ search?: string; sortBy?: string; sortDir?: string }>;
+}) {
+  const { search, sortBy, sortDir } = await searchParams;
   const space = await requireCurrentSpace();
   const supabase = await createClient();
   const {
@@ -22,7 +27,11 @@ export default async function RevisarPage({ searchParams }: { searchParams: Prom
   if (!user) redirect("/login");
 
   const [transactions, accounts, cards, categories] = await Promise.all([
-    listReviewTransactions(space.id, { search }),
+    listReviewTransactions(space.id, {
+      search,
+      sortBy: sortBy as TransactionSortBy | undefined,
+      sortDir: sortDir as TransactionSortDir | undefined,
+    }),
     listAccounts(space.id),
     listCards(space.id),
     listCategories(space.id),
@@ -46,14 +55,16 @@ export default async function RevisarPage({ searchParams }: { searchParams: Prom
           description="Não há lançamentos pendentes de classificação no momento."
         />
       ) : (
-        <ReviewTable
-          spaceId={space.id}
-          userId={user.id}
-          transactions={transactions}
-          categories={categories}
-          accounts={accounts}
-          cards={cards}
-        />
+        <Suspense>
+          <ReviewTable
+            spaceId={space.id}
+            userId={user.id}
+            transactions={transactions}
+            categories={categories}
+            accounts={accounts}
+            cards={cards}
+          />
+        </Suspense>
       )}
     </div>
   );

@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import type { TransactionWithRelations } from "@/lib/data/transactions";
+import type { TransactionWithRelations, TransactionSortBy } from "@/lib/data/transactions";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
@@ -13,11 +14,19 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Layers, ArrowLeftRight, Sparkles, CreditCard } from "lucide-react";
+import { Layers, ArrowLeftRight, Sparkles, CreditCard, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { BulkClassifyDialog } from "./bulk-classify-dialog";
 import { markAsTransferAction, markAsCardPaymentAction, applyRulesToUnclassifiedAction } from "./actions";
+
+const SORTABLE_COLUMNS: { key: TransactionSortBy; label: string }[] = [
+  { key: "date", label: "Data" },
+  { key: "description", label: "Descrição" },
+  { key: "account", label: "Conta / cartão" },
+  { key: "value", label: "Valor" },
+  { key: "nature", label: "Sugestão" },
+];
 
 export function ReviewTable({
   spaceId,
@@ -36,6 +45,20 @@ export function ReviewTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [cardPaymentCardId, setCardPaymentCardId] = useState("");
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const activeSortBy = searchParams.get("sortBy") as TransactionSortBy | null;
+  const activeSortDir = searchParams.get("sortDir") === "asc" ? "asc" : "desc";
+
+  function handleSort(column: TransactionSortBy) {
+    const nextDir = activeSortBy === column && activeSortDir === "desc" ? "asc" : "desc";
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sortBy", column);
+    params.set("sortDir", nextDir);
+    router.push(`${pathname}?${params.toString()}`);
+  }
 
   const groups = useMemo(() => {
     const map = new Map<string, TransactionWithRelations[]>();
@@ -161,11 +184,26 @@ export function ReviewTable({
               <Th className="w-10">
                 <Checkbox checked={selected.size === transactions.length && transactions.length > 0} onCheckedChange={toggleAll} aria-label="Selecionar todos" />
               </Th>
-              <Th>Data</Th>
-              <Th>Descrição</Th>
-              <Th>Conta / cartão</Th>
-              <Th className="text-right">Valor</Th>
-              <Th>Sugestão</Th>
+              {SORTABLE_COLUMNS.map((col) => (
+                <Th key={col.key} className={col.key === "value" ? "text-right" : undefined}>
+                  <button
+                    type="button"
+                    onClick={() => handleSort(col.key)}
+                    className={`inline-flex items-center gap-1 hover:text-text-primary ${col.key === "value" ? "flex-row-reverse" : ""}`}
+                  >
+                    {col.label}
+                    {activeSortBy === col.key ? (
+                      activeSortDir === "asc" ? (
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      )
+                    ) : (
+                      <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" />
+                    )}
+                  </button>
+                </Th>
+              ))}
               <Th>Status</Th>
               <Th className="w-10" />
             </Tr>

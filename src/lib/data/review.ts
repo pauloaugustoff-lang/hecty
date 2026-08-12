@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { TransactionWithRelations } from "./transactions";
+import type { TransactionWithRelations, TransactionSortBy, TransactionSortDir } from "./transactions";
 
 const SELECT_WITH_RELATIONS = `
   *,
@@ -12,7 +12,7 @@ const SELECT_WITH_RELATIONS = `
 
 export async function listReviewTransactions(
   spaceId: string,
-  options?: { search?: string },
+  options?: { search?: string; sortBy?: TransactionSortBy; sortDir?: TransactionSortDir },
 ): Promise<TransactionWithRelations[]> {
   const supabase = await createClient();
 
@@ -21,10 +21,36 @@ export async function listReviewTransactions(
     .select(SELECT_WITH_RELATIONS)
     .eq("space_id", spaceId)
     .is("deleted_at", null)
-    .neq("classification_status", "classificado")
-    .order("normalized_description")
-    .order("movement_date", { ascending: false })
-    .limit(500);
+    .neq("classification_status", "classificado");
+
+  if (options?.sortBy) {
+    const ascending = options.sortDir === "asc";
+    switch (options.sortBy) {
+      case "value":
+        query = query.order("amount_cents", { ascending });
+        break;
+      case "description":
+        query = query.order("original_description", { ascending });
+        break;
+      case "nature":
+        query = query.order("nature", { ascending });
+        break;
+      case "account":
+        query = query
+          .order("name", { ascending, nullsFirst: false, referencedTable: "account" })
+          .order("name", { ascending, nullsFirst: false, referencedTable: "card" });
+        break;
+      case "date":
+        query = query.order("movement_date", { ascending });
+        break;
+    }
+  } else {
+    // Padrão: agrupa descrições parecidas, para facilitar classificar várias
+    // de uma vez (ver o botão "selecionar grupo" na tabela de revisão).
+    query = query.order("normalized_description").order("movement_date", { ascending: false });
+  }
+
+  query = query.limit(500);
 
   if (options?.search) {
     query = query.ilike("normalized_description", `%${options.search.toUpperCase()}%`);
