@@ -6,7 +6,7 @@ import { Tag } from "lucide-react";
 import { bulkUpdateCategoryAction } from "./actions";
 import type { CategoryRow } from "@/lib/data/categories";
 import type { TransactionNature } from "@/lib/supabase/types";
-import { natureLabels } from "@/lib/domain/labels";
+import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -38,8 +38,26 @@ export function BulkCategoryDialog({
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
 
-  const parentCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
+  // Sem dado de direção aqui (só os ids foram passados) — naturezas ambíguas
+  // por si só (empréstimo, ajuste, não classificado) ficam sem filtro.
+  const categoryKind = nature ? categoryKindForNature(nature) : null;
+  const parentCategories = useMemo(
+    () => categories.filter((c) => !c.parent_id && (!categoryKind || c.kind === categoryKind)),
+    [categories, categoryKind],
+  );
   const subcategories = useMemo(() => categories.filter((c) => c.parent_id === categoryId), [categories, categoryId]);
+
+  function changeNature(next: TransactionNature | "") {
+    const nextKind = next ? categoryKindForNature(next) : null;
+    if (nextKind && categoryId) {
+      const current = categories.find((c) => c.id === categoryId);
+      if (current && current.kind !== nextKind) {
+        setCategoryId("");
+        setSubcategoryId("");
+      }
+    }
+    setNature(next);
+  }
 
   function handleSubmit() {
     startTransition(async () => {
@@ -82,7 +100,7 @@ export function BulkCategoryDialog({
         <div className="space-y-3">
           <div>
             <Label htmlFor="bulk-nature">Natureza</Label>
-            <Select value={nature || "none"} onValueChange={(v) => setNature(v === "none" ? "" : (v as TransactionNature))}>
+            <Select value={nature || "none"} onValueChange={(v) => changeNature(v === "none" ? "" : (v as TransactionNature))}>
               <SelectTrigger id="bulk-nature">
                 <SelectValue />
               </SelectTrigger>

@@ -7,7 +7,7 @@ import { bulkClassifyAction } from "./actions";
 import type { TransactionWithRelations } from "@/lib/data/transactions";
 import type { CategoryRow } from "@/lib/data/categories";
 import type { TransactionNature } from "@/lib/supabase/types";
-import { natureLabels } from "@/lib/domain/labels";
+import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,8 +45,30 @@ export function BulkClassifyDialog({
   const [counterparty, setCounterparty] = useState("");
   const [createRule, setCreateRule] = useState(true);
 
-  const parentCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
+  // Direção só serve de dica pra naturezas ambíguas por si só (empréstimo,
+  // ajuste, não classificado); só usa quando todos os selecionados concordam.
+  const directionHint = useMemo(() => {
+    const directions = new Set(selectedTransactions.map((t) => t.direction));
+    return directions.size === 1 ? [...directions][0] : undefined;
+  }, [selectedTransactions]);
+  const categoryKind = categoryKindForNature(nature, directionHint);
+  const parentCategories = useMemo(
+    () => categories.filter((c) => !c.parent_id && (!categoryKind || c.kind === categoryKind)),
+    [categories, categoryKind],
+  );
   const subcategories = useMemo(() => categories.filter((c) => c.parent_id === categoryId), [categories, categoryId]);
+
+  function changeNature(next: TransactionNature) {
+    const nextKind = categoryKindForNature(next, directionHint);
+    if (nextKind && categoryId) {
+      const current = categories.find((c) => c.id === categoryId);
+      if (current && current.kind !== nextKind) {
+        setCategoryId("");
+        setSubcategoryId("");
+      }
+    }
+    setNature(next);
+  }
 
   const commonDescription = useMemo(() => {
     const descriptions = new Set(selectedTransactions.map((t) => t.normalized_description));
@@ -94,7 +116,7 @@ export function BulkClassifyDialog({
         <div className="space-y-4">
           <div>
             <Label htmlFor="nature">Natureza</Label>
-            <Select value={nature} onValueChange={(v) => setNature(v as TransactionNature)}>
+            <Select value={nature} onValueChange={(v) => changeNature(v as TransactionNature)}>
               <SelectTrigger id="nature">
                 <SelectValue />
               </SelectTrigger>

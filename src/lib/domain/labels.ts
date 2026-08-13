@@ -1,10 +1,12 @@
 import type {
   AccountType,
   CardBrand,
+  CategoryKind,
   ClassificationStatus,
   ImportRowStatus,
   ImportStatus,
   MemberRole,
+  TransactionDirection,
   TransactionNature,
   TransactionOrigin,
 } from "@/lib/supabase/types";
@@ -68,6 +70,41 @@ export const NEUTRAL_NATURES: TransactionNature[] = [
   "ajuste",
   "nao_classificado",
 ];
+
+/**
+ * Categoria compatível com uma natureza (pra filtrar o seletor de categoria e
+ * não deixar, por ex., uma "Outras receitas" ser classificada com categoria
+ * de despesa). Para naturezas ambíguas por si só (empréstimo, ajuste, não
+ * classificado) usa a direção do lançamento quando disponível; sem direção,
+ * retorna null e o chamador deve exibir todas as categorias sem filtrar.
+ */
+export function categoryKindForNature(nature: TransactionNature, direction?: TransactionDirection): CategoryKind | null {
+  switch (nature) {
+    case "aplicacao_financeira":
+    case "resgate_investimento":
+    case "resgate_a_decompor":
+      return "investimento";
+    case "despesa":
+      return "despesa";
+    case "receita_trabalho":
+    case "rendimento_investimento":
+    case "outras_receitas":
+    case "reembolso":
+    case "estorno":
+      return "receita";
+    case "transferencia_entre_contas":
+    case "pagamento_cartao":
+      return "transferencia";
+    case "emprestimo":
+    case "ajuste":
+    case "nao_classificado":
+      if (direction === "entrada") return "receita";
+      if (direction === "saida") return "despesa";
+      return null;
+    default:
+      return null;
+  }
+}
 
 export const accountTypeLabels: Record<AccountType, string> = {
   corrente: "Conta corrente",
