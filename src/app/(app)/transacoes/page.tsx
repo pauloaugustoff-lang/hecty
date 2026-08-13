@@ -14,7 +14,7 @@ import { TransferDialog } from "./transfer-dialog";
 import { CardPaymentDialog } from "./card-payment-dialog";
 import { TransactionFilters } from "./transaction-filters";
 import { TransactionsTable } from "./transactions-table";
-import type { TransactionNature } from "@/lib/supabase/types";
+import type { TransactionDirection, TransactionNature } from "@/lib/supabase/types";
 import type { TransactionSortBy, TransactionSortDir } from "@/lib/data/transactions";
 
 const PAGE_SIZE = 50;
@@ -40,6 +40,7 @@ export default async function TransacoesPage({
       categoryId: params.categoryId,
       subcategoryId: params.subcategoryId,
       nature: params.nature as TransactionNature | undefined,
+      direction: params.direction as TransactionDirection | undefined,
       search: params.search,
       minAmountCents: params.minAmount ? Number(params.minAmount) : undefined,
       maxAmountCents: params.maxAmount ? Number(params.maxAmount) : undefined,

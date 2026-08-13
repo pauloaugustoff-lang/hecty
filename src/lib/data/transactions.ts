@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Database, TransactionNature } from "@/lib/supabase/types";
+import type { Database, TransactionDirection, TransactionNature } from "@/lib/supabase/types";
 
 export type TransactionRow = Database["public"]["Tables"]["transactions"]["Row"];
 export type RedemptionRow = Database["public"]["Tables"]["redemption_details"]["Row"];
@@ -31,6 +31,7 @@ export interface TransactionFilters {
   categoryId?: string;
   subcategoryId?: string;
   nature?: TransactionNature;
+  direction?: TransactionDirection;
   onlyUnclassified?: boolean;
   search?: string;
   minAmountCents?: number;
@@ -100,6 +101,7 @@ export async function listTransactions(
   if (filters.subcategoryId) query = query.eq("subcategory_id", filters.subcategoryId);
   else if (filters.categoryId) query = query.eq("category_id", filters.categoryId);
   if (filters.nature) query = query.eq("nature", filters.nature);
+  if (filters.direction) query = query.eq("direction", filters.direction);
   if (filters.onlyUnclassified) query = query.neq("classification_status", "classificado");
   if (filters.search) {
     query = query.ilike("normalized_description", `%${filters.search.toUpperCase()}%`);

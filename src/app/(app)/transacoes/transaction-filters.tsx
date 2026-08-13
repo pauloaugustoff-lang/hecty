@@ -181,6 +181,16 @@ export function TransactionFilters({
           ))}
         </SelectContent>
       </Select>
+      <Select value={searchParams.get("direction") ?? "all"} onValueChange={(v) => updateParam("direction", v === "all" ? "" : v)}>
+        <SelectTrigger className="w-36">
+          <SelectValue placeholder="Entrada/Saída" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">Entrada e saída</SelectItem>
+          <SelectItem value="entrada">Entrada (+)</SelectItem>
+          <SelectItem value="saida">Saída (−)</SelectItem>
+        </SelectContent>
+      </Select>
       <Select value={searchParams.get("nature") ?? "all"} onValueChange={(v) => updateParam("nature", v === "all" ? "" : v)}>
         <SelectTrigger className="w-52">
           <SelectValue placeholder="Natureza" />
