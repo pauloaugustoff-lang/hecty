@@ -71,24 +71,45 @@ async function applyReimbursementAbatement(spaceId: string, rows: RawTx[]): Prom
 
   if (!links?.length) return rows;
 
+  const despesaAmountById = new Map(rows.filter((r) => r.nature === "despesa").map((r) => [r.id, r.amount_cents]));
   const reductionByDespesaId = new Map<string, number>();
-  const reimbursementIds = new Set<string>();
+  // Quando o reembolso/estorno vinculado é maior que a despesa que ele cobre
+  // (ex.: R$130 de reembolso para uma despesa de R$100), o excedente não pode
+  // simplesmente sumir: a despesa abate só até zero, e a diferença volta a
+  // contar como receita própria do lançamento de reembolso/estorno.
+  const leftoverByReimbursementId = new Map<string, number>();
   for (const link of links) {
-    reductionByDespesaId.set(link.expense_transaction_id, (reductionByDespesaId.get(link.expense_transaction_id) ?? 0) + link.allocated_amount_cents);
-    reimbursementIds.add(link.reimbursement_transaction_id);
+    const despesaAmount = despesaAmountById.get(link.expense_transaction_id) ?? 0;
+    const alreadyReduced = reductionByDespesaId.get(link.expense_transaction_id) ?? 0;
+    const remainingDespesaAmount = Math.max(0, despesaAmount - alreadyReduced);
+    const absorbed = Math.min(remainingDespesaAmount, link.allocated_amount_cents);
+    const leftover = link.allocated_amount_cents - absorbed;
+    reductionByDespesaId.set(link.expense_transaction_id, alreadyReduced + absorbed);
+    if (leftover > 0) {
+      leftoverByReimbursementId.set(
+        link.reimbursement_transaction_id,
+        (leftoverByReimbursementId.get(link.reimbursement_transaction_id) ?? 0) + leftover,
+      );
+    }
   }
+
+  const reimbursementIds = new Set(links.map((l) => l.reimbursement_transaction_id));
 
   return rows
     .map((row) => {
       if (row.nature === "despesa" && reductionByDespesaId.has(row.id)) {
         return { ...row, amount_cents: Math.max(0, row.amount_cents - reductionByDespesaId.get(row.id)!) };
       }
+      // Reembolso/estorno já contabilizado acima (via redução na despesa) não
+      // pode contar de novo pelo próprio valor — mas se sobrou excedente não
+      // absorvido por nenhuma despesa, esse resto conta como receita própria
+      // (na categoria do próprio lançamento de reembolso/estorno).
+      if ((REIMBURSING_NATURES as readonly string[]).includes(row.nature) && reimbursementIds.has(row.id)) {
+        return { ...row, amount_cents: leftoverByReimbursementId.get(row.id) ?? 0 };
+      }
       return row;
     })
-    // Remove reembolsos/estornos já contabilizados acima (via redução na
-    // despesa) que por acaso também caíram neste mesmo período consultado —
-    // senão contariam duas vezes: uma como redução, outra como receita própria.
-    .filter((row) => !((REIMBURSING_NATURES as readonly string[]).includes(row.nature) && reimbursementIds.has(row.id)));
+    .filter((row) => !((REIMBURSING_NATURES as readonly string[]).includes(row.nature) && reimbursementIds.has(row.id) && row.amount_cents === 0));
 }
 
 function toDashboardInput(tx: RawTx): DashboardTransactionInput {
