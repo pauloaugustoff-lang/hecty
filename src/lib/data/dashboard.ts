@@ -5,6 +5,10 @@ import { REVENUE_NATURES } from "@/lib/domain/labels";
 import { format, startOfMonth, subMonths } from "date-fns";
 
 const REIMBURSING_NATURES = ["reembolso", "estorno"] as const;
+// Categoria sintética (não existe no banco) pro excedente de um reembolso/
+// estorno maior que a despesa vinculada — fica destacado no painel em vez de
+// cair em "Sem categoria" junto com lançamentos realmente sem classificação.
+const LEFTOVER_REIMBURSEMENT_CATEGORY_ID = "__reembolso_a_maior__";
 
 interface RawTx {
   id: string;
@@ -102,10 +106,19 @@ async function applyReimbursementAbatement(spaceId: string, rows: RawTx[]): Prom
       }
       // Reembolso/estorno já contabilizado acima (via redução na despesa) não
       // pode contar de novo pelo próprio valor — mas se sobrou excedente não
-      // absorvido por nenhuma despesa, esse resto conta como receita própria
-      // (na categoria do próprio lançamento de reembolso/estorno).
+      // absorvido por nenhuma despesa, esse resto conta como receita própria,
+      // sob uma categoria sintética própria (em vez da categoria real do
+      // lançamento, que costuma estar vazia ou não fazer sentido pra esse
+      // valor específico — é o excedente, não a categoria original).
       if ((REIMBURSING_NATURES as readonly string[]).includes(row.nature) && reimbursementIds.has(row.id)) {
-        return { ...row, amount_cents: leftoverByReimbursementId.get(row.id) ?? 0 };
+        return {
+          ...row,
+          amount_cents: leftoverByReimbursementId.get(row.id) ?? 0,
+          category_id: LEFTOVER_REIMBURSEMENT_CATEGORY_ID,
+          category: { name: "Reembolso a maior", color: "#f59e0b" },
+          subcategory_id: null,
+          subcategory: null,
+        };
       }
       return row;
     })
