@@ -77,6 +77,9 @@ export function CashFlowChart({ data }: { data: MonthlyPoint[] }) {
   );
 }
 
+const MAX_VISIBLE_CATEGORIES = 8;
+const OTHERS_CATEGORY_ID = "__outras__";
+
 export function CategoryBreakdownChart({
   data,
   emptyMessage = "Nenhum lançamento classificado no período.",
@@ -85,8 +88,28 @@ export function CategoryBreakdownChart({
   emptyMessage?: string;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const top = data.slice(0, 8);
   const total = data.reduce((sum, d) => sum + d.amountCents, 0);
+
+  // Categorias além das maiores não somem silenciosamente: viram uma linha
+  // "Outras", que pode ser expandida (mesmo mecanismo de subcategoria) pra
+  // ver o que foi agrupado ali — assim o total sempre bate com "Despesas".
+  let top: CategoryBreakdownPoint[];
+  if (data.length > MAX_VISIBLE_CATEGORIES) {
+    const visible = data.slice(0, MAX_VISIBLE_CATEGORIES - 1);
+    const rest = data.slice(MAX_VISIBLE_CATEGORIES - 1);
+    top = [
+      ...visible,
+      {
+        categoryId: OTHERS_CATEGORY_ID,
+        name: "Outras",
+        color: "#94a3b8",
+        amountCents: rest.reduce((sum, d) => sum + d.amountCents, 0),
+        subcategories: rest.map((d) => ({ subcategoryId: d.categoryId, name: d.name, color: d.color, amountCents: d.amountCents })),
+      },
+    ];
+  } else {
+    top = data;
+  }
 
   if (top.length === 0) {
     return <p className="py-8 text-center text-sm text-text-tertiary">{emptyMessage}</p>;
