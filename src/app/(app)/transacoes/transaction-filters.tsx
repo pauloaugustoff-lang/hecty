@@ -2,12 +2,15 @@
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
+import { addMonths, endOfMonth, format, subMonths } from "date-fns";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
 import { natureLabels } from "@/lib/domain/labels";
 import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 function centsParamToInput(value: string | null): string {
@@ -36,6 +39,25 @@ export function TransactionFilters({
   const categoryId = searchParams.get("categoryId") ?? "";
   const parentCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
   const subcategories = useMemo(() => categories.filter((c) => c.parent_id === categoryId), [categories, categoryId]);
+
+  const fromParam = searchParams.get("from");
+  // Serve só de âncora pras setas/seletor de mês — não precisa refletir um
+  // range "de mês inteiro" de fato, já que from/to continuam livres.
+  const monthAnchor = fromParam ? new Date(`${fromParam}T00:00:00`) : new Date();
+
+  function setCompetenceMonth(monthStr: string) {
+    const [year, monthNum] = monthStr.split("-").map(Number);
+    if (!year || !monthNum) return;
+    const first = new Date(year, monthNum - 1, 1);
+    const last = endOfMonth(first);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("from", format(first, "yyyy-MM-dd"));
+    params.set("to", format(last, "yyyy-MM-dd"));
+    params.delete("offset");
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  }
 
   function updateParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -70,6 +92,33 @@ export function TransactionFilters({
         onChange={(e) => updateParam("search", e.target.value)}
         className="w-56"
       />
+      <div className="flex items-center gap-1 rounded-[var(--radius-md)] border border-border px-1 py-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setCompetenceMonth(format(subMonths(monthAnchor, 1), "yyyy-MM"))}
+          aria-label="Mês anterior"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <input
+          type="month"
+          value={format(monthAnchor, "yyyy-MM")}
+          onChange={(e) => e.target.value && setCompetenceMonth(e.target.value)}
+          className="h-7 rounded-[var(--radius-sm)] border-0 bg-transparent px-1 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
+          aria-label="Selecionar competência"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setCompetenceMonth(format(addMonths(monthAnchor, 1), "yyyy-MM"))}
+          aria-label="Próximo mês"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
       <Input
         type="date"
         value={searchParams.get("from") ?? ""}
