@@ -9,7 +9,7 @@ import { parseCsv } from "@/lib/import/parsers/csv";
 import { parseXlsx } from "@/lib/import/parsers/xlsx";
 import { parseOfx } from "@/lib/import/parsers/ofx";
 import { suggestMapping, normalizeTableRows, normalizeOfxRows, type ColumnMapping, type NormalizedCandidate } from "@/lib/import/pipeline";
-import { computeDedupHash, checkDuplicate } from "@/lib/import/dedup";
+import { computeDedupHash } from "@/lib/import/dedup";
 import { findMatchingRule, actionFromRule } from "@/lib/rules/engine";
 import { toRuleDefinition } from "@/lib/data/rules";
 import type { ImportRowStatus, ImportSourceType, TransactionDirection } from "@/lib/supabase/types";
@@ -152,18 +152,6 @@ export async function stageImportBatchAction(spaceId: string, input: StageInput)
     throw new Error("Não foi possível criar o lote de importação.");
   }
 
-  const { data: existing } = await supabase
-    .from("transactions")
-    .select("id, dedup_hash, import_external_id")
-    .eq("space_id", spaceId)
-    .is("deleted_at", null);
-
-  const existingRefs = (existing ?? []).map((tx) => ({
-    id: tx.id,
-    dedupHash: tx.dedup_hash,
-    importExternalId: tx.import_external_id,
-  }));
-
   const { data: rules } = await supabase.from("rules").select("*").eq("space_id", spaceId).eq("is_active", true).order("priority");
   const ruleDefs = (rules ?? []).map(toRuleDefinition);
 
@@ -193,10 +181,6 @@ export async function stageImportBatchAction(spaceId: string, input: StageInput)
         })
       : null;
 
-    const dupCheck = dedupHash
-      ? checkDuplicate({ dedupHash, externalId: c.externalId }, existingRefs)
-      : { isPotentialDuplicate: false, matchedTransactionId: null, reason: null };
-
     const match =
       c.amountCents !== null && c.direction
         ? findMatchingRule(ruleDefs, {
@@ -222,8 +206,8 @@ export async function stageImportBatchAction(spaceId: string, input: StageInput)
       direction: c.direction,
       external_id: c.externalId,
       dedup_hash: dedupHash,
-      potential_duplicate_of: dupCheck.matchedTransactionId,
-      status: (c.error ? "ignorado" : dupCheck.isPotentialDuplicate ? "duplicata_possivel" : "pendente") as ImportRowStatus,
+      potential_duplicate_of: null,
+      status: (c.error ? "ignorado" : "pendente") as ImportRowStatus,
       suggested_nature: action?.nature ?? null,
       suggested_category_id: action?.categoryId ?? null,
       suggested_subcategory_id: action?.subcategoryId ?? null,
@@ -235,12 +219,6 @@ export async function stageImportBatchAction(spaceId: string, input: StageInput)
   if (rowsError) {
     throw new Error("Não foi possível preparar as linhas do lote.");
   }
-
-  const duplicateCount = rows.filter((r) => r.status === "duplicata_possivel").length;
-  await supabase
-    .from("import_batches")
-    .update({ duplicate_rows: duplicateCount })
-    .eq("id", batch.id);
 
   revalidatePath("/importar");
   redirect(`/importar/${batch.id}`);
