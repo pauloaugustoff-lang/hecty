@@ -82,14 +82,18 @@ function parseTransactionFormData(formData: FormData) {
   });
 }
 
-/** Substitui os vínculos de um reembolso/estorno pelas despesas selecionadas
- * — cada uma abatida pelo próprio valor cheio. Fora dessas naturezas,
+/** Substitui os vínculos de um reembolso/estorno pelas despesas selecionadas.
+ * O valor do PRÓPRIO reembolso/estorno (não o da despesa) é distribuído entre
+ * as despesas vinculadas, proporcionalmente ao valor de cada uma — cobre tanto
+ * o caso de reembolso parcial (estorno de metade de uma mensalidade) quanto o
+ * de um único pagamento cobrindo várias despesas. Fora dessas naturezas,
  * qualquer vínculo antigo (ex.: usuário trocou a natureza) é removido. */
 async function syncReimbursementLinks(
   transactionId: string,
   spaceId: string,
   nature: string,
   expenseIds: string[],
+  reimbursementAmountCents: number,
 ) {
   const supabase = await createClient();
   await supabase.from("transaction_reimbursement_links").delete().eq("reimbursement_transaction_id", transactionId);
@@ -99,14 +103,28 @@ async function syncReimbursementLinks(
   const { data: expenses } = await supabase.from("transactions").select("id, amount_cents").in("id", expenseIds);
   if (!expenses?.length) return;
 
-  await supabase.from("transaction_reimbursement_links").insert(
-    expenses.map((e) => ({
-      space_id: spaceId,
-      reimbursement_transaction_id: transactionId,
-      expense_transaction_id: e.id,
-      allocated_amount_cents: e.amount_cents,
-    })),
-  );
+  const totalExpenseAmount = expenses.reduce((sum, e) => sum + e.amount_cents, 0);
+  if (totalExpenseAmount === 0) return;
+
+  let remaining = reimbursementAmountCents;
+  const links = expenses
+    .map((e, i) => {
+      const isLast = i === expenses.length - 1;
+      const share = isLast ? remaining : Math.round((e.amount_cents / totalExpenseAmount) * reimbursementAmountCents);
+      remaining -= share;
+      return {
+        space_id: spaceId,
+        reimbursement_transaction_id: transactionId,
+        expense_transaction_id: e.id,
+        allocated_amount_cents: share,
+      };
+    })
+    // allocated_amount_cents > 0 é obrigatório no banco.
+    .filter((link) => link.allocated_amount_cents > 0);
+
+  if (links.length > 0) {
+    await supabase.from("transaction_reimbursement_links").insert(links);
+  }
 }
 
 export async function createTransactionAction(
@@ -162,7 +180,7 @@ export async function createTransactionAction(
   if (parsed.data.nature === "resgate_investimento" || parsed.data.nature === "resgate_a_decompor") {
     await upsertRedemptionFromFormData(inserted.id, spaceId, parsed.data.amountCents, formData);
   }
-  await syncReimbursementLinks(inserted.id, spaceId, parsed.data.nature, parsed.data.linkedExpenseIds ?? []);
+  await syncReimbursementLinks(inserted.id, spaceId, parsed.data.nature, parsed.data.linkedExpenseIds ?? [], parsed.data.amountCents);
 
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
@@ -224,7 +242,7 @@ export async function updateTransactionAction(
   } else {
     await supabase.from("redemption_details").delete().eq("transaction_id", transactionId);
   }
-  await syncReimbursementLinks(transactionId, spaceId, parsed.data.nature, parsed.data.linkedExpenseIds ?? []);
+  await syncReimbursementLinks(transactionId, spaceId, parsed.data.nature, parsed.data.linkedExpenseIds ?? [], parsed.data.amountCents);
 
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");

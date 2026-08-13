@@ -429,8 +429,10 @@ export function TransactionFormDialog({
                 ) : null}
 
                 <p className="mt-1.5 text-[11px] text-text-tertiary">
-                  Vinculando, o valor de cada despesa selecionada é abatido daquela categoria — não fica só contando como receita à parte.
-                  Dá pra selecionar mais de uma (ex.: uma transferência de R$200 cobrindo dois boletos de R$100).
+                  O valor deste lançamento é distribuído entre as despesas selecionadas (proporcional ao valor de
+                  cada uma) e abatido daquela categoria — não fica só contando como receita à parte. Cobre tanto
+                  reembolso parcial (ex.: estorno de metade de uma mensalidade) quanto um pagamento cobrindo várias
+                  despesas de uma vez.
                 </p>
                 {linkedExpenses.length > 0 && amountCents > 0 && linkedExpensesTotal !== amountCents ? (
                   <Callout tone="warning" className="mt-2">
