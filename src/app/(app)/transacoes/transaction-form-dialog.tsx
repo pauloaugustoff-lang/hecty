@@ -20,6 +20,7 @@ import { natureLabels } from "@/lib/domain/labels";
 import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
 import { getStatementPeriod } from "@/lib/transactions/cards";
 import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -102,8 +103,13 @@ export function TransactionFormDialog({
   // sobrescrever silenciosamente assim que o diálogo abre.
   const [competenceDateTouched, setCompetenceDateTouched] = useState(Boolean(transaction));
 
-  const [linkedExpenses, setLinkedExpenses] = useState<{ id: string; original_description: string; amount_cents: number }[]>(
-    () => (transaction?.reimbursement_links ?? []).map((l) => l.expense).filter((e): e is { id: string; original_description: string; amount_cents: number } => Boolean(e)),
+  const [linkedExpenses, setLinkedExpenses] = useState<
+    { id: string; original_description: string; amount_cents: number; movement_date: string }[]
+  >(
+    () =>
+      (transaction?.reimbursement_links ?? [])
+        .map((l) => l.expense)
+        .filter((e): e is { id: string; original_description: string; amount_cents: number; movement_date: string } => Boolean(e)),
   );
   const [expenseSearch, setExpenseSearch] = useState("");
   const [expenseResults, setExpenseResults] = useState<ExpenseSearchResult[]>([]);
@@ -371,7 +377,10 @@ export function TransactionFormDialog({
                         className="flex items-center justify-between rounded-[var(--radius-sm)] border border-border bg-surface-raised px-3 py-2 text-sm"
                       >
                         <span className="text-text-primary">
-                          {e.original_description} — {formatCentsToBRL(e.amount_cents)}
+                          {e.original_description}
+                          <span className="text-text-tertiary"> · {format(new Date(`${e.movement_date}T00:00:00`), "dd/MM/yyyy", { locale: ptBR })}</span>
+                          {" — "}
+                          {formatCentsToBRL(e.amount_cents)}
                         </span>
                         <button
                           type="button"
@@ -410,7 +419,10 @@ export function TransactionFormDialog({
                               key={r.id}
                               type="button"
                               onClick={() => {
-                                setLinkedExpenses((prev) => [...prev, { id: r.id, original_description: r.originalDescription, amount_cents: r.amountCents }]);
+                                setLinkedExpenses((prev) => [
+                                  ...prev,
+                                  { id: r.id, original_description: r.originalDescription, amount_cents: r.amountCents, movement_date: r.movementDate },
+                                ]);
                                 setExpenseSearch("");
                                 setExpenseResults([]);
                               }}
@@ -418,7 +430,11 @@ export function TransactionFormDialog({
                             >
                               <span>
                                 {r.originalDescription}
-                                {r.categoryName ? <span className="text-text-tertiary"> · {r.categoryName}</span> : null}
+                                <span className="text-text-tertiary">
+                                  {" · "}
+                                  {format(new Date(`${r.movementDate}T00:00:00`), "dd/MM/yyyy", { locale: ptBR })}
+                                  {r.categoryName ? ` · ${r.categoryName}` : ""}
+                                </span>
                               </span>
                               <span className="tabular text-text-secondary">{formatCentsToBRL(r.amountCents)}</span>
                             </button>

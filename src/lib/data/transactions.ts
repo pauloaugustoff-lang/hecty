@@ -7,7 +7,7 @@ export type RedemptionRow = Database["public"]["Tables"]["redemption_details"]["
 export interface LinkedExpenseSummary {
   expense_transaction_id: string;
   allocated_amount_cents: number;
-  expense: { id: string; original_description: string; amount_cents: number } | null;
+  expense: { id: string; original_description: string; amount_cents: number; movement_date: string } | null;
 }
 
 export interface TransactionWithRelations extends TransactionRow {
@@ -52,7 +52,7 @@ const SELECT_WITH_RELATIONS = `
   reimbursement_links:transaction_reimbursement_links!reimbursement_transaction_id(
     expense_transaction_id,
     allocated_amount_cents,
-    expense:transactions!expense_transaction_id(id, original_description, amount_cents)
+    expense:transactions!expense_transaction_id(id, original_description, amount_cents, movement_date)
   )
 `;
 
