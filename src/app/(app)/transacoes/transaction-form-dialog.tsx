@@ -60,6 +60,12 @@ const CATEGORY_KIND_LABELS: Record<CategoryKind, string> = {
   outro: "Outro",
 };
 
+function categoryKindFor(nature: TransactionNature, direction: TransactionDirection): CategoryKind {
+  if (nature === "aplicacao_financeira" || nature === "resgate_investimento" || nature === "resgate_a_decompor") return "investimento";
+  if (direction === "entrada") return "receita";
+  return "despesa";
+}
+
 const CATEGORY_COLORS = ["#f97316", "#0ea5e9", "#8b5cf6", "#22c55e", "#14b8a6", "#ec4899", "#6366f1", "#94a3b8"];
 const NEW_CATEGORY_VALUE = "__new__";
 
@@ -128,17 +134,33 @@ export function TransactionFormDialog({
   const isRedemption = nature === "resgate_investimento" || nature === "resgate_a_decompor";
   const isReimbursing = nature === "reembolso" || nature === "estorno";
   const linkedExpensesTotal = linkedExpenses.reduce((sum, e) => sum + e.amount_cents, 0);
-  const parentCategories = useMemo(() => localCategories.filter((c) => !c.parent_id), [localCategories]);
+  const categoryKind = categoryKindFor(nature, direction);
+  // Só mostra categorias compatíveis com a natureza/direção atual, pra não dar
+  // pra classificar ex. uma "Outras receitas" com uma categoria de despesa.
+  const parentCategories = useMemo(
+    () => localCategories.filter((c) => !c.parent_id && c.kind === categoryKind),
+    [localCategories, categoryKind],
+  );
   const subcategories = useMemo(
     () => localCategories.filter((c) => c.parent_id === categoryId),
     [localCategories, categoryId],
   );
   const selectedParentCategory = useMemo(() => localCategories.find((c) => c.id === categoryId), [localCategories, categoryId]);
 
-  function suggestedCategoryKind(): CategoryKind {
-    if (nature === "aplicacao_financeira" || nature === "resgate_investimento" || nature === "resgate_a_decompor") return "investimento";
-    if (direction === "entrada") return "receita";
-    return "despesa";
+  function changeNature(next: TransactionNature) {
+    if (categoryKindFor(next, direction) !== categoryKind) {
+      setCategoryId("");
+      setSubcategoryId("");
+    }
+    setNature(next);
+  }
+
+  function changeDirection(next: TransactionDirection) {
+    if (categoryKindFor(nature, next) !== categoryKind) {
+      setCategoryId("");
+      setSubcategoryId("");
+    }
+    setDirection(next);
   }
 
   const [accountId, cardId] = source.startsWith("account:")
@@ -271,7 +293,7 @@ export function TransactionFormDialog({
               <button
                 key={d}
                 type="button"
-                onClick={() => setDirection(d)}
+                onClick={() => changeDirection(d)}
                 className={cn(
                   "flex-1 rounded-[var(--radius-sm)] py-1.5 text-sm font-medium transition-colors",
                   direction === d ? (d === "saida" ? "bg-negative-soft text-negative" : "bg-positive-soft text-positive") : "text-text-tertiary",
@@ -351,7 +373,7 @@ export function TransactionFormDialog({
             ) : null}
             <div className="col-span-2">
               <Label htmlFor="nature">Natureza</Label>
-              <Select value={nature} onValueChange={(v) => setNature(v as TransactionNature)}>
+              <Select value={nature} onValueChange={(v) => changeNature(v as TransactionNature)}>
                 <SelectTrigger id="nature">
                   <SelectValue />
                 </SelectTrigger>
@@ -467,7 +489,7 @@ export function TransactionFormDialog({
                     value={categoryId}
                     onValueChange={(v) => {
                       if (v === NEW_CATEGORY_VALUE) {
-                        setNewCategoryKind(suggestedCategoryKind());
+                        setNewCategoryKind(categoryKind);
                         setCreatingCategory(true);
                         return;
                       }
