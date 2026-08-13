@@ -80,6 +80,86 @@ export function CashFlowChart({ data }: { data: MonthlyPoint[] }) {
 const MAX_VISIBLE_CATEGORIES = 8;
 const OTHERS_CATEGORY_ID = "__outras__";
 
+type CategoryBreakdownItem = CategoryBreakdownPoint & { nested?: CategoryBreakdownPoint[] };
+
+function hasChildren(item: CategoryBreakdownItem): boolean {
+  if (item.nested && item.nested.length > 0) return true;
+  return item.subcategories.length > 1 || (item.subcategories.length === 1 && item.subcategories[0].subcategoryId !== "sem-subcategoria");
+}
+
+function SubcategoryBars({ parentAmountCents, subcategories }: { parentAmountCents: number; subcategories: CategoryBreakdownPoint["subcategories"] }) {
+  return (
+    <div className="mb-1 ml-4 mt-2 space-y-2 border-l border-border-subtle pl-3">
+      {subcategories.map((sub) => {
+        const subPct = parentAmountCents > 0 ? (sub.amountCents / parentAmountCents) * 100 : 0;
+        return (
+          <div key={sub.subcategoryId}>
+            <div className="mb-1 flex items-center justify-between text-[12px]">
+              <span className="text-text-secondary">{sub.name}</span>
+              <span className="tabular text-text-tertiary">{formatCentsToBRL(sub.amountCents)}</span>
+            </div>
+            <div className="h-1 overflow-hidden rounded-full bg-surface-sunken">
+              <div className="h-full rounded-full opacity-70" style={{ width: `${subPct}%`, backgroundColor: sub.color }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CategoryRow({
+  item,
+  parentAmountCents,
+  expanded,
+  onToggle,
+}: {
+  item: CategoryBreakdownItem;
+  parentAmountCents: number;
+  expanded: Set<string>;
+  onToggle: (categoryId: string) => void;
+}) {
+  const pct = parentAmountCents > 0 ? (item.amountCents / parentAmountCents) * 100 : 0;
+  const expandable = hasChildren(item);
+  const isOpen = expanded.has(item.categoryId);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => expandable && onToggle(item.categoryId)}
+        disabled={!expandable}
+        className={`w-full text-left ${expandable ? "cursor-pointer" : "cursor-default"}`}
+      >
+        <div className="mb-1 flex items-center justify-between text-[13px]">
+          <span className="flex items-center gap-1 text-text-primary">
+            {expandable ? (
+              <ChevronRight className={`h-3 w-3 shrink-0 text-text-tertiary transition-transform ${isOpen ? "rotate-90" : ""}`} />
+            ) : (
+              <span className="w-3" />
+            )}
+            {item.name}
+          </span>
+          <span className="tabular text-text-secondary">{formatCentsToBRL(item.amountCents)}</span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-surface-sunken">
+          <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: item.color }} />
+        </div>
+      </button>
+
+      {isOpen && item.nested && item.nested.length > 0 ? (
+        <div className="mb-1 ml-4 mt-2 space-y-2 border-l border-border-subtle pl-3">
+          {item.nested.map((nestedItem) => (
+            <CategoryRow key={nestedItem.categoryId} item={nestedItem} parentAmountCents={item.amountCents} expanded={expanded} onToggle={onToggle} />
+          ))}
+        </div>
+      ) : null}
+
+      {isOpen && !item.nested ? <SubcategoryBars parentAmountCents={item.amountCents} subcategories={item.subcategories} /> : null}
+    </div>
+  );
+}
+
 export function CategoryBreakdownChart({
   data,
   emptyMessage = "Nenhum lançamento classificado no período.",
@@ -91,9 +171,9 @@ export function CategoryBreakdownChart({
   const total = data.reduce((sum, d) => sum + d.amountCents, 0);
 
   // Categorias além das maiores não somem silenciosamente: viram uma linha
-  // "Outras", que pode ser expandida (mesmo mecanismo de subcategoria) pra
-  // ver o que foi agrupado ali — assim o total sempre bate com "Despesas".
-  let top: CategoryBreakdownPoint[];
+  // "Outras", expansível para revelar as categorias agrupadas ali — e cada
+  // uma delas continua expansível pras próprias subcategorias (2º nível).
+  let top: CategoryBreakdownItem[];
   if (data.length > MAX_VISIBLE_CATEGORIES) {
     const visible = data.slice(0, MAX_VISIBLE_CATEGORIES - 1);
     const rest = data.slice(MAX_VISIBLE_CATEGORIES - 1);
@@ -104,7 +184,8 @@ export function CategoryBreakdownChart({
         name: "Outras",
         color: "#94a3b8",
         amountCents: rest.reduce((sum, d) => sum + d.amountCents, 0),
-        subcategories: rest.map((d) => ({ subcategoryId: d.categoryId, name: d.name, color: d.color, amountCents: d.amountCents })),
+        subcategories: [],
+        nested: rest,
       },
     ];
   } else {
@@ -124,9 +205,7 @@ export function CategoryBreakdownChart({
     });
   }
 
-  const expandableIds = top
-    .filter((item) => item.subcategories.length > 1 || (item.subcategories.length === 1 && item.subcategories[0].subcategoryId !== "sem-subcategoria"))
-    .map((item) => item.categoryId);
+  const expandableIds = top.filter(hasChildren).map((item) => item.categoryId);
   const allExpanded = expandableIds.length > 0 && expandableIds.every((id) => expanded.has(id));
 
   function toggleAll() {
@@ -145,56 +224,9 @@ export function CategoryBreakdownChart({
           {allExpanded ? "Recolher todas" : "Expandir todas"}
         </button>
       ) : null}
-      {top.map((item) => {
-        const pct = total > 0 ? (item.amountCents / total) * 100 : 0;
-        const hasSubcategories = expandableIds.includes(item.categoryId);
-        const isOpen = expanded.has(item.categoryId);
-
-        return (
-          <div key={item.categoryId}>
-            <button
-              type="button"
-              onClick={() => hasSubcategories && toggle(item.categoryId)}
-              disabled={!hasSubcategories}
-              className={`w-full text-left ${hasSubcategories ? "cursor-pointer" : "cursor-default"}`}
-            >
-              <div className="mb-1 flex items-center justify-between text-[13px]">
-                <span className="flex items-center gap-1 text-text-primary">
-                  {hasSubcategories ? (
-                    <ChevronRight className={`h-3 w-3 shrink-0 text-text-tertiary transition-transform ${isOpen ? "rotate-90" : ""}`} />
-                  ) : (
-                    <span className="w-3" />
-                  )}
-                  {item.name}
-                </span>
-                <span className="tabular text-text-secondary">{formatCentsToBRL(item.amountCents)}</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-surface-sunken">
-                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: item.color }} />
-              </div>
-            </button>
-
-            {isOpen ? (
-              <div className="mb-1 ml-4 mt-2 space-y-2 border-l border-border-subtle pl-3">
-                {item.subcategories.map((sub) => {
-                  const subPct = item.amountCents > 0 ? (sub.amountCents / item.amountCents) * 100 : 0;
-                  return (
-                    <div key={sub.subcategoryId}>
-                      <div className="mb-1 flex items-center justify-between text-[12px]">
-                        <span className="text-text-secondary">{sub.name}</span>
-                        <span className="tabular text-text-tertiary">{formatCentsToBRL(sub.amountCents)}</span>
-                      </div>
-                      <div className="h-1 overflow-hidden rounded-full bg-surface-sunken">
-                        <div className="h-full rounded-full opacity-70" style={{ width: `${subPct}%`, backgroundColor: sub.color }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
+      {top.map((item) => (
+        <CategoryRow key={item.categoryId} item={item} parentAmountCents={total} expanded={expanded} onToggle={toggle} />
+      ))}
     </div>
   );
 }
