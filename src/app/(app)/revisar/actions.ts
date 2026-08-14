@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeDescription } from "@/lib/import/normalize";
+import { fetchAllRows, chunk } from "@/lib/supabase/fetch-all";
+import { classificationStatusFor } from "@/lib/domain/classification";
+import { revalidateTransactionData } from "@/lib/revalidate-financial";
 import type { TransactionNature } from "@/lib/supabase/types";
 
 export interface BulkClassifyInput {
@@ -35,7 +38,10 @@ export async function bulkClassifyAction(spaceId: string, userId: string, input:
         nature: input.nature,
         category_id: input.categoryId,
         subcategory_id: input.subcategoryId,
-        classification_status: "classificado" as const,
+        // Regra compartilhada, não "classificado" fixo: natureza "resgate a
+        // decompor" (ou despesa sem categoria) precisa CONTINUAR na fila de
+        // revisão — o valor fixo tirava esses lançamentos da fila pra sempre.
+        classification_status: classificationStatusFor(input.nature, Boolean(input.categoryId)),
         ...(input.counterparty ? { counterparty: input.counterparty } : {}),
       },
       { count: "exact" },
@@ -62,9 +68,7 @@ export async function bulkClassifyAction(spaceId: string, userId: string, input:
     });
   }
 
-  revalidatePath("/revisar");
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
+  revalidateTransactionData();
   revalidatePath("/regras");
   return { success: true, updatedCount: count ?? input.transactionIds.length };
 }
@@ -109,9 +113,7 @@ export async function markAsTransferAction(spaceId: string, input: MarkTransferI
     return { error: "Não foi possível vincular os lançamentos." };
   }
 
-  revalidatePath("/revisar");
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
+  revalidateTransactionData();
   return { success: true, updatedCount: 2 };
 }
 
@@ -163,10 +165,7 @@ export async function markAsCardPaymentAction(spaceId: string, input: MarkCardPa
     return { error: "Não foi possível marcar como pagamento de fatura." };
   }
 
-  revalidatePath("/revisar");
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
-  revalidatePath("/cartoes");
+  revalidateTransactionData();
   return { success: true, updatedCount: count ?? input.transactionIds.length };
 }
 
@@ -205,25 +204,37 @@ export async function decomposeRedemptionAction(spaceId: string, input: Decompos
     .update({ nature: "resgate_investimento", classification_status: "classificado" })
     .eq("id", input.transactionId);
 
-  revalidatePath("/revisar");
-  revalidatePath("/visao-geral");
+  revalidateTransactionData();
   return { success: true, updatedCount: 1 };
 }
 
 export async function applyRulesToUnclassifiedAction(spaceId: string): Promise<BulkActionState> {
   const supabase = await createClient();
 
-  const [{ data: rules }, { data: transactions }] = await Promise.all([
+  const [{ data: rules }, transactions] = await Promise.all([
     supabase.from("rules").select("*").eq("space_id", spaceId).eq("is_active", true).order("priority"),
-    supabase
-      .from("transactions")
-      .select("id, original_description, amount_cents, direction, account_id, card_id")
-      .eq("space_id", spaceId)
-      .is("deleted_at", null)
-      .neq("classification_status", "classificado"),
+    // Paginado: sem isto a varredura parava em 1000 lançamentos (max_rows do
+    // PostgREST) e reportava sucesso, deixando o resto sem classificar.
+    fetchAllRows<{
+      id: string;
+      original_description: string;
+      amount_cents: number;
+      direction: "entrada" | "saida";
+      account_id: string | null;
+      card_id: string | null;
+    }>((pageFrom, pageTo) =>
+      supabase
+        .from("transactions")
+        .select("id, original_description, amount_cents, direction, account_id, card_id")
+        .eq("space_id", spaceId)
+        .is("deleted_at", null)
+        .neq("classification_status", "classificado")
+        .order("id")
+        .range(pageFrom, pageTo),
+    ),
   ]);
 
-  if (!rules?.length || !transactions?.length) {
+  if (!rules?.length || !transactions.length) {
     return { success: true, updatedCount: 0 };
   }
 
@@ -231,8 +242,12 @@ export async function applyRulesToUnclassifiedAction(spaceId: string): Promise<B
   const { toRuleDefinition } = await import("@/lib/data/rules");
 
   const ruleDefs = rules.map(toRuleDefinition);
-  let updated = 0;
 
+  // Todos os lançamentos casados pela mesma regra recebem a mesma ação, então
+  // agrupa por regra e faz um UPDATE em lote por grupo — antes era um UPDATE
+  // sequencial POR lançamento (centenas de round trips, estourando o timeout
+  // da Server Action em espaços grandes e deixando a varredura pela metade).
+  const groups = new Map<string, { ruleId: string; action: ReturnType<typeof actionFromRule>; ids: string[] }>();
   for (const tx of transactions) {
     const match = findMatchingRule(ruleDefs, {
       description: tx.original_description,
@@ -241,29 +256,41 @@ export async function applyRulesToUnclassifiedAction(spaceId: string): Promise<B
       accountId: tx.account_id,
       cardId: tx.card_id,
     });
-
     if (!match) continue;
-    const action = actionFromRule(match);
 
-    await supabase
-      .from("transactions")
-      .update({
-        nature: action.markTransfer ? "transferencia_entre_contas" : action.nature,
-        category_id: action.categoryId ?? null,
-        subcategory_id: action.subcategoryId ?? null,
-        counterparty: action.counterparty ?? undefined,
-        classification_status: "classificado",
-        classified_by_rule_id: match.id,
-      })
-      .eq("id", tx.id);
+    const group = groups.get(match.id) ?? { ruleId: match.id, action: actionFromRule(match), ids: [] };
+    group.ids.push(tx.id);
+    groups.set(match.id, group);
+  }
 
-    updated += 1;
+  let updated = 0;
+  for (const group of groups.values()) {
+    const effectiveNature = group.action.markTransfer
+      ? ("transferencia_entre_contas" as TransactionNature)
+      : (group.action.nature ?? ("nao_classificado" as TransactionNature));
+
+    for (const ids of chunk(group.ids, 200)) {
+      const { error } = await supabase
+        .from("transactions")
+        .update({
+          nature: group.action.markTransfer ? "transferencia_entre_contas" : group.action.nature,
+          category_id: group.action.categoryId ?? null,
+          subcategory_id: group.action.subcategoryId ?? null,
+          counterparty: group.action.counterparty ?? undefined,
+          // Regra sem natureza (só categoria) ou com natureza que exige mais
+          // etapas não deve marcar como classificado — antes o valor fixo
+          // tirava esses lançamentos da fila de revisão indevidamente.
+          classification_status: classificationStatusFor(effectiveNature, Boolean(group.action.categoryId)),
+          classified_by_rule_id: group.ruleId,
+        })
+        .in("id", ids);
+
+      if (!error) updated += ids.length;
+    }
   }
 
   if (updated > 0) {
-    revalidatePath("/revisar");
-    revalidatePath("/transacoes");
-    revalidatePath("/visao-geral");
+    revalidateTransactionData();
   }
 
   return { success: true, updatedCount: updated };

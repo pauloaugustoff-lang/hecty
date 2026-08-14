@@ -10,7 +10,7 @@ import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
 import type { TransactionNature, RuleMatchType, TransactionDirection, CategoryKind } from "@/lib/supabase/types";
-import { natureLabels } from "@/lib/domain/labels";
+import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
 import { sortByName, sortEntriesByLabel } from "@/lib/utils/sort";
 import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
 import { Button } from "@/components/ui/button";
@@ -97,7 +97,15 @@ export function RuleFormDialog({
   const [newSubcategoryColor, setNewSubcategoryColor] = useState(CATEGORY_COLORS[0]);
   const [isCreatingCategory, startCreateCategoryTransition] = useTransition();
 
-  const parentCategories = useMemo(() => sortByName(localCategories.filter((c) => !c.parent_id)), [localCategories]);
+  // Mesmo filtro de compatibilidade natureza→tipo de categoria dos diálogos
+  // de classificação — este era o único que ainda oferecia todas as
+  // categorias, deixando criar regra "Outras receitas" com categoria de
+  // despesa. Sem natureza definida (regra só de categoria), não filtra.
+  const actionKind = actionNature ? categoryKindForNature(actionNature, direction || undefined) : null;
+  const parentCategories = useMemo(
+    () => sortByName(localCategories.filter((c) => !c.parent_id && (!actionKind || c.kind === actionKind))),
+    [localCategories, actionKind],
+  );
   const subcategories = useMemo(
     () => sortByName(localCategories.filter((c) => c.parent_id === categoryId)),
     [localCategories, categoryId],
@@ -109,7 +117,7 @@ export function RuleFormDialog({
       toast.success(isEdit ? "Regra atualizada" : "Regra criada");
       setOpen(false);
     }
-  }, [state.success, isEdit]);
+  }, [state, isEdit]);
 
   function addMatchValue(raw: string) {
     const value = raw.trim();
@@ -336,7 +344,21 @@ export function RuleFormDialog({
           <div className="rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-3.5">
             <p className="mb-3 text-[13px] font-medium text-accent">Então, classifique como...</p>
             <div className="grid grid-cols-2 gap-2">
-              <Select value={actionNature || "none"} onValueChange={(v) => setActionNature(v === "none" ? "" : (v as TransactionNature))}>
+              <Select
+                value={actionNature || "none"}
+                onValueChange={(v) => {
+                  const next = v === "none" ? "" : (v as TransactionNature);
+                  const nextKind = next ? categoryKindForNature(next, direction || undefined) : null;
+                  if (nextKind && categoryId) {
+                    const current = localCategories.find((c) => c.id === categoryId);
+                    if (current && current.kind !== nextKind) {
+                      setCategoryId("");
+                      setSubcategoryId("");
+                    }
+                  }
+                  setActionNature(next);
+                }}
+              >
                 <SelectTrigger className="col-span-2">
                   <SelectValue placeholder="Natureza" />
                 </SelectTrigger>
@@ -353,6 +375,7 @@ export function RuleFormDialog({
                 value={categoryId || "none"}
                 onValueChange={(v) => {
                   if (v === NEW_CATEGORY_VALUE) {
+                    setNewCategoryKind(actionKind ?? "despesa");
                     setCreatingCategory(true);
                     return;
                   }

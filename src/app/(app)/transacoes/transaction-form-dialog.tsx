@@ -19,7 +19,7 @@ import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
 import type { TagRow } from "@/lib/data/tags";
 import type { TransactionNature, TransactionDirection, CategoryKind } from "@/lib/supabase/types";
-import { natureLabels } from "@/lib/domain/labels";
+import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
 import { parseBRLToCents, formatCentsToBRL, formatCents } from "@/lib/money/money";
 import { getStatementPeriod } from "@/lib/transactions/cards";
 import { format } from "date-fns";
@@ -65,12 +65,6 @@ const CATEGORY_KIND_LABELS: Record<CategoryKind, string> = {
   transferencia: "Transferência",
   outro: "Outro",
 };
-
-function categoryKindFor(nature: TransactionNature, direction: TransactionDirection): CategoryKind {
-  if (nature === "aplicacao_financeira" || nature === "resgate_investimento" || nature === "resgate_a_decompor") return "investimento";
-  if (direction === "entrada") return "receita";
-  return "despesa";
-}
 
 const CATEGORY_COLORS = ["#f97316", "#0ea5e9", "#8b5cf6", "#22c55e", "#14b8a6", "#ec4899", "#6366f1", "#94a3b8"];
 const NEW_CATEGORY_VALUE = "__new__";
@@ -151,11 +145,14 @@ export function TransactionFormDialog({
   const isRedemption = nature === "resgate_investimento" || nature === "resgate_a_decompor";
   const isReimbursing = nature === "reembolso" || nature === "estorno";
   const linkedExpensesTotal = linkedExpenses.reduce((sum, e) => sum + e.amount_cents, 0);
-  const categoryKind = categoryKindFor(nature, direction);
+  // Helper compartilhado (mesmo dos diálogos em massa) — a cópia local que
+  // existia aqui divergia dele e oferecia categorias diferentes pro mesmo
+  // lançamento dependendo de qual diálogo o editava.
+  const categoryKind = categoryKindForNature(nature, direction);
   // Só mostra categorias compatíveis com a natureza/direção atual, pra não dar
   // pra classificar ex. uma "Outras receitas" com uma categoria de despesa.
   const parentCategories = useMemo(
-    () => sortByName(localCategories.filter((c) => !c.parent_id && c.kind === categoryKind)),
+    () => sortByName(localCategories.filter((c) => !c.parent_id && (!categoryKind || c.kind === categoryKind))),
     [localCategories, categoryKind],
   );
   const subcategories = useMemo(
@@ -172,7 +169,7 @@ export function TransactionFormDialog({
   const hasExactTagMatch = localTags.some((t) => t.name.toLowerCase() === tagSearch.trim().toLowerCase());
 
   function changeNature(next: TransactionNature) {
-    if (categoryKindFor(next, direction) !== categoryKind) {
+    if (categoryKindForNature(next, direction) !== categoryKind) {
       setCategoryId("");
       setSubcategoryId("");
     }
@@ -180,7 +177,7 @@ export function TransactionFormDialog({
   }
 
   function changeDirection(next: TransactionDirection) {
-    if (categoryKindFor(nature, next) !== categoryKind) {
+    if (categoryKindForNature(nature, next) !== categoryKind) {
       setCategoryId("");
       setSubcategoryId("");
     }
@@ -227,7 +224,7 @@ export function TransactionFormDialog({
       toast.success(isEdit ? "Lançamento atualizado" : "Lançamento criado");
       setOpen(false);
     }
-  }, [state.success, isEdit]);
+  }, [state, isEdit]);
 
   let amountCents = 0;
   try {
@@ -540,7 +537,7 @@ export function TransactionFormDialog({
                     value={categoryId}
                     onValueChange={(v) => {
                       if (v === NEW_CATEGORY_VALUE) {
-                        setNewCategoryKind(categoryKind);
+                        setNewCategoryKind(categoryKind ?? "despesa");
                         setCreatingCategory(true);
                         return;
                       }

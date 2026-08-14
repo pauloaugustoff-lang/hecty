@@ -66,6 +66,11 @@ export function parseDecimalPtBR(input: string): number {
     normalized = normalized.replace(/\./g, "").replace(",", ".");
   } else if (hasComma) {
     normalized = normalized.replace(",", ".");
+  } else if (hasDot && /^-?\d{1,3}(\.\d{3})+$/.test(normalized)) {
+    // Só pontos e todos agrupando de 3 em 3 ("1.500", "1.500.000"): é o
+    // separador de milhar pt-BR sem casa decimal, não um decimal — senão
+    // "1.500" (mil e quinhentos) viraria R$ 1,50.
+    normalized = normalized.replace(/\./g, "");
   }
 
   const value = Number(normalized);

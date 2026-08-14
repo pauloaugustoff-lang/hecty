@@ -50,7 +50,7 @@ export function CardFormDialog({
       toast.success(isEdit ? "Cartão atualizado" : "Cartão criado");
       setOpen(false);
     }
-  }, [state.success, isEdit]);
+  }, [state, isEdit]);
 
   let limitCents = 0;
   try {

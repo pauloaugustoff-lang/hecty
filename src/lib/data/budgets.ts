@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
-import { getNonBrlAccountAndCardIds } from "@/lib/data/dashboard";
+import { fetchTransactions } from "@/lib/data/dashboard";
 
 export type BudgetRow = Database["public"]["Tables"]["budgets"]["Row"];
 
@@ -15,52 +15,25 @@ export async function listBudgets(spaceId: string, referenceMonth: string): Prom
   return data ?? [];
 }
 
+/**
+ * Reutiliza a mesma consulta do dashboard (paginada, com abatimento de
+ * reembolso/estorno e exclusão de contas não-BRL) em vez de reimplementar as
+ * três regras aqui — as cópias já tinham divergido entre si, e uma delas
+ * truncava no limite de 1000 linhas do PostgREST. Com o React cache() do
+ * fetchTransactions, a janela consultada pelo Planejamento sai de graça
+ * quando coincide com a do dashboard.
+ */
 export async function getActualSpendByCategory(
   spaceId: string,
   from: string,
   to: string,
 ): Promise<Record<string, number>> {
-  const supabase = await createClient();
-  const [{ data, error }, { accountIds: nonBrlAccountIds, cardIds: nonBrlCardIds }] = await Promise.all([
-    supabase
-      .from("transactions")
-      .select("id, category_id, amount_cents, direction, nature, account_id, card_id")
-      .eq("space_id", spaceId)
-      .eq("nature", "despesa")
-      .eq("direction", "saida")
-      .is("deleted_at", null)
-      .gte("competence_date", from)
-      .lte("competence_date", to),
-    getNonBrlAccountAndCardIds(spaceId),
-  ]);
-
-  if (error) throw error;
-
-  // Mesma regra do dashboard: sem conversão automática ainda, despesas em
-  // contas/cartões de moeda diferente de BRL ficam fora do total do orçamento.
-  const rows = (data ?? []).filter(
-    (tx) => !(tx.account_id && nonBrlAccountIds.has(tx.account_id)) && !(tx.card_id && nonBrlCardIds.has(tx.card_id)),
-  );
-  const despesaIds = rows.map((tx) => tx.id);
-  const reductionByDespesaId = new Map<string, number>();
-
-  if (despesaIds.length > 0) {
-    const { data: links } = await supabase
-      .from("transaction_reimbursement_links")
-      .select("expense_transaction_id, allocated_amount_cents")
-      .eq("space_id", spaceId)
-      .in("expense_transaction_id", despesaIds);
-
-    for (const link of links ?? []) {
-      reductionByDespesaId.set(link.expense_transaction_id, (reductionByDespesaId.get(link.expense_transaction_id) ?? 0) + link.allocated_amount_cents);
-    }
-  }
+  const rows = await fetchTransactions(spaceId, from, to);
 
   const totals: Record<string, number> = {};
   for (const tx of rows) {
-    if (!tx.category_id) continue;
-    const netAmount = Math.max(0, tx.amount_cents - (reductionByDespesaId.get(tx.id) ?? 0));
-    totals[tx.category_id] = (totals[tx.category_id] ?? 0) + netAmount;
+    if (tx.nature !== "despesa" || tx.direction !== "saida" || !tx.category_id) continue;
+    totals[tx.category_id] = (totals[tx.category_id] ?? 0) + tx.amount_cents;
   }
   return totals;
 }

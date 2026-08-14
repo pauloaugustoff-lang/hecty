@@ -42,7 +42,7 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
       toast.success("Transferência registrada");
       setOpen(false);
     }
-  }, [state.success]);
+  }, [state]);
 
   let amountCents = 0;
   try {

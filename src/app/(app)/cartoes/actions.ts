@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { cardFormSchema } from "@/lib/validation/schemas";
+import { revalidateTransactionData } from "@/lib/revalidate-financial";
 
 export interface ActionState {
   error?: string;
@@ -73,7 +74,10 @@ export async function updateCardAction(
 
   if (error) return { error: "Não foi possível salvar as alterações." };
 
-  revalidatePath("/cartoes");
+  // Trocar a conta pagadora (payment_account_id) muda a moeda efetiva do
+  // cartão e, com ela, quais lançamentos entram nos agregados BRL do
+  // dashboard/planejamento — não basta revalidar /cartoes.
+  revalidateTransactionData();
   return { success: true };
 }
 

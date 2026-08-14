@@ -46,7 +46,7 @@ export function AccountFormDialog({ spaceId, account }: { spaceId: string; accou
       toast.success(isEdit ? "Conta atualizada" : "Conta criada");
       setOpen(false);
     }
-  }, [state.success, isEdit]);
+  }, [state, isEdit]);
 
   let initialBalanceCents = 0;
   try {

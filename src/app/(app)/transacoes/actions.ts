@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { transactionFormSchema, redemptionBreakdownSchema, tagFormSchema } from "@/lib/validation/schemas";
 import type { TagRow } from "@/lib/data/tags";
@@ -9,6 +8,8 @@ import { computeDedupHash } from "@/lib/import/dedup";
 import { buildTransferPair } from "@/lib/transactions/transfers";
 import { redemptionNature } from "@/lib/money/redemption";
 import { parseDecimalPtBR } from "@/lib/money/money";
+import { classificationStatusFor } from "@/lib/domain/classification";
+import { revalidateTransactionData } from "@/lib/revalidate-financial";
 import { randomUUID } from "node:crypto";
 import type { TransactionNature } from "@/lib/supabase/types";
 
@@ -50,12 +51,6 @@ export async function searchExpenseTransactionsAction(spaceId: string, query: st
     movementDate: tx.movement_date,
     categoryName: (tx.category as unknown as { name: string } | null)?.name ?? null,
   }));
-}
-
-function classificationStatusFor(nature: string, hasCategory: boolean): "classificado" | "nao_classificado" {
-  if (nature === "nao_classificado" || nature === "resgate_a_decompor") return "nao_classificado";
-  if (nature === "transferencia_entre_contas" || nature === "pagamento_cartao") return "classificado";
-  return hasCategory ? "classificado" : "nao_classificado";
 }
 
 const REIMBURSING_NATURES = new Set(["reembolso", "estorno"]);
@@ -111,8 +106,7 @@ export async function createTagAction(spaceId: string, _prev: TagActionState, fo
     return { error: "Não foi possível criar a tag." };
   }
 
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
+  revalidateTransactionData();
   return { success: true, tag };
 }
 
@@ -217,11 +211,7 @@ export async function createTransactionAction(
   }
   await syncReimbursementLinks(inserted.id, spaceId, parsed.data.nature, parsed.data.linkedExpenseIds ?? [], parsed.data.amountCents);
 
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
-  revalidatePath("/revisar");
-  revalidatePath("/planejamento");
-  revalidatePath("/contas");
+  revalidateTransactionData();
   return { success: true };
 }
 
@@ -281,11 +271,7 @@ export async function updateTransactionAction(
   }
   await syncReimbursementLinks(transactionId, spaceId, parsed.data.nature, parsed.data.linkedExpenseIds ?? [], parsed.data.amountCents);
 
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
-  revalidatePath("/revisar");
-  revalidatePath("/planejamento");
-  revalidatePath("/contas");
+  revalidateTransactionData();
   return { success: true };
 }
 
@@ -352,9 +338,7 @@ function emptyToNull(value: FormDataEntryValue | null): string | null {
 export async function deleteTransactionAction(transactionId: string) {
   const supabase = await createClient();
   await supabase.from("transactions").update({ deleted_at: new Date().toISOString() }).eq("id", transactionId);
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
-  revalidatePath("/contas");
+  revalidateTransactionData();
 }
 
 export async function deleteTransactionsAction(transactionIds: string[]): Promise<ActionState> {
@@ -370,11 +354,7 @@ export async function deleteTransactionsAction(transactionIds: string[]): Promis
     return { error: "Não foi possível excluir os lançamentos selecionados." };
   }
 
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
-  revalidatePath("/revisar");
-  revalidatePath("/planejamento");
-  revalidatePath("/contas");
+  revalidateTransactionData();
   return { success: true };
 }
 
@@ -407,10 +387,7 @@ export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdat
     return { error: "Não foi possível alterar os lançamentos selecionados." };
   }
 
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
-  revalidatePath("/revisar");
-  revalidatePath("/planejamento");
+  revalidateTransactionData();
   return { success: true };
 }
 
@@ -435,13 +412,19 @@ export async function createTransferAction(
     return { error: "Preencha todos os campos." };
   }
 
-  const supabaseForCheck = await createClient();
-  const { data: transferAccounts } = await supabaseForCheck
+  const supabase = await createClient();
+  const { data: transferAccounts, error: accountsError } = await supabase
     .from("accounts")
     .select("id, currency")
     .in("id", [fromAccountId, toAccountId]);
-  const fromCurrency = transferAccounts?.find((a) => a.id === fromAccountId)?.currency ?? "BRL";
-  const toCurrency = transferAccounts?.find((a) => a.id === toAccountId)?.currency ?? "BRL";
+  const fromCurrency = transferAccounts?.find((a) => a.id === fromAccountId)?.currency;
+  const toCurrency = transferAccounts?.find((a) => a.id === toAccountId)?.currency;
+  // Falha aqui tem que ser ruidosa: se as moedas caíssem num padrão "BRL" por
+  // engano, uma transferência USD→BRL pularia a conversão e creditaria os
+  // mesmos centavos na conta de destino como se fossem reais.
+  if (accountsError || !fromCurrency || !toCurrency) {
+    return { error: "Não foi possível confirmar as moedas das contas. Tente novamente." };
+  }
 
   let toAmountCents: number | undefined;
   let notes = "";
@@ -476,7 +459,6 @@ export async function createTransferAction(
     return { error: e instanceof Error ? e.message : "Dados inválidos." };
   }
 
-  const supabase = await createClient();
   const dedupBase = { spaceId, movementDate, description };
 
   const rows = pair.map((leg) => ({
@@ -496,9 +478,7 @@ export async function createTransferAction(
     return { error: "Não foi possível registrar a transferência." };
   }
 
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
-  revalidatePath("/contas");
+  revalidateTransactionData();
   return { success: true };
 }
 
@@ -556,9 +536,6 @@ export async function createCardPaymentAction(
     return { error: "Não foi possível registrar o pagamento." };
   }
 
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
-  revalidatePath("/cartoes");
-  revalidatePath("/contas");
+  revalidateTransactionData();
   return { success: true };
 }

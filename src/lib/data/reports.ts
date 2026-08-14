@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { getNonBrlAccountAndCardIds } from "@/lib/data/dashboard";
 import { format, startOfMonth, subMonths } from "date-fns";
 
 export interface RecurringExpense {
@@ -14,16 +16,35 @@ export async function getRecurringExpenses(spaceId: string, monthsBack = 6): Pro
   const supabase = await createClient();
   const from = format(startOfMonth(subMonths(new Date(), monthsBack - 1)), "yyyy-MM-dd");
 
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("normalized_description, original_description, amount_cents, competence_date")
-    .eq("space_id", spaceId)
-    .eq("nature", "despesa")
-    .eq("direction", "saida")
-    .is("deleted_at", null)
-    .gte("competence_date", from);
+  // Paginado (6 meses de despesas passam do max_rows de 1000 do PostgREST) e
+  // com a mesma exclusão de contas/cartões não-BRL do dashboard — sem ela,
+  // uma assinatura em dólar aparecia aqui formatada como se fosse R$.
+  const [rows, { accountIds: nonBrlAccountIds, cardIds: nonBrlCardIds }] = await Promise.all([
+    fetchAllRows<{
+      normalized_description: string;
+      original_description: string;
+      amount_cents: number;
+      competence_date: string;
+      account_id: string | null;
+      card_id: string | null;
+    }>((pageFrom, pageTo) =>
+      supabase
+        .from("transactions")
+        .select("normalized_description, original_description, amount_cents, competence_date, account_id, card_id")
+        .eq("space_id", spaceId)
+        .eq("nature", "despesa")
+        .eq("direction", "saida")
+        .is("deleted_at", null)
+        .gte("competence_date", from)
+        .order("id")
+        .range(pageFrom, pageTo),
+    ),
+    getNonBrlAccountAndCardIds(spaceId),
+  ]);
 
-  if (error) throw error;
+  const data = rows.filter(
+    (tx) => !(tx.account_id && nonBrlAccountIds.has(tx.account_id)) && !(tx.card_id && nonBrlCardIds.has(tx.card_id)),
+  );
 
   const byDescription = new Map<string, { months: Set<string>; amounts: number[]; sample: string; last: { date: string; amount: number } }>();
 

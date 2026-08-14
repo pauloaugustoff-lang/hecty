@@ -20,7 +20,7 @@ export function InviteForm({ spaceId }: { spaceId: string }) {
 
   useEffect(() => {
     if (state.success) toast.success("Convite enviado");
-  }, [state.success]);
+  }, [state]);
 
   return (
     <div className="space-y-3 rounded-[var(--radius-lg)] border border-border-subtle p-4">

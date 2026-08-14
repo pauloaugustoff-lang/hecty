@@ -57,7 +57,7 @@ export function CategoryFormDialog({
       toast.success(isEdit ? "Categoria atualizada" : "Categoria criada");
       setOpen(false);
     }
-  }, [state.success, isEdit]);
+  }, [state, isEdit]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

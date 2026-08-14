@@ -38,7 +38,7 @@ export function CardPaymentDialog({ spaceId, accounts, cards }: { spaceId: strin
       toast.success("Pagamento de fatura registrado");
       setOpen(false);
     }
-  }, [state.success]);
+  }, [state]);
 
   let amountCents = 0;
   try {

@@ -15,7 +15,7 @@ export function RenameSpaceForm({ spaceId, currentName }: { spaceId: string; cur
 
   useEffect(() => {
     if (state.success) toast.success("Espaço renomeado");
-  }, [state.success]);
+  }, [state]);
 
   return (
     <form action={formAction} className="flex items-end gap-2">

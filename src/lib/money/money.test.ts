@@ -37,6 +37,13 @@ describe("parseBRLToCents", () => {
 
   it("interpreta ponto decimal simples", () => {
     expect(parseBRLToCents("105.5")).toBe(10550);
+    expect(parseBRLToCents("1234.56")).toBe(123456);
+  });
+
+  it("interpreta ponto como milhar quando agrupa de 3 em 3 sem decimais", () => {
+    expect(parseBRLToCents("1.500")).toBe(150_000);
+    expect(parseBRLToCents("1.500.000")).toBe(150_000_000);
+    expect(parseBRLToCents("12.345")).toBe(1_234_500);
   });
 
   it("ignora o símbolo de moeda e espaços", () => {

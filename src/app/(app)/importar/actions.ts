@@ -12,6 +12,10 @@ import { suggestMapping, normalizeTableRows, normalizeOfxRows, type ColumnMappin
 import { computeDedupHash } from "@/lib/import/dedup";
 import { findMatchingRule, actionFromRule } from "@/lib/rules/engine";
 import { toRuleDefinition } from "@/lib/data/rules";
+import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { classificationStatusFor } from "@/lib/domain/classification";
+import { revalidateTransactionData } from "@/lib/revalidate-financial";
+import type { ImportBatchRowRow } from "@/lib/data/imports";
 import type { ImportRowStatus, ImportSourceType, TransactionDirection } from "@/lib/supabase/types";
 
 export interface AnalyzeResult {
@@ -236,14 +240,20 @@ export async function confirmImportBatchAction(
 ): Promise<ConfirmResult> {
   const supabase = await createClient();
 
-  const { data: batch } = await supabase.from("import_batches").select("*").eq("id", batchId).single();
+  const { data: batch } = await supabase.from("import_batches").select("*").eq("id", batchId).eq("space_id", spaceId).single();
   if (!batch) return { error: "Lote não encontrado." };
 
-  const { data: rows } = await supabase.from("import_batch_rows").select("*").eq("batch_id", batchId);
-  if (!rows) return { error: "Não foi possível carregar as linhas do lote." };
+  // Paginado: um lote acima de 1000 linhas era truncado pelo max_rows do
+  // PostgREST — linhas selecionadas pelo usuário nunca eram importadas e
+  // linhas que ele nem viu eram marcadas como ignoradas, sem nenhum erro.
+  const rows = await fetchAllRows<ImportBatchRowRow>((pageFrom, pageTo) =>
+    supabase.from("import_batch_rows").select("*").eq("batch_id", batchId).order("row_index").range(pageFrom, pageTo),
+  );
+  if (rows.length === 0) return { error: "Não foi possível carregar as linhas do lote." };
 
-  const toImport = rows.filter((r) => selectedRowIds.includes(r.id) && r.movement_date && r.amount_cents !== null && r.direction);
-  const toIgnore = rows.filter((r) => !selectedRowIds.includes(r.id));
+  const selectedIds = new Set(selectedRowIds);
+  const toImport = rows.filter((r) => selectedIds.has(r.id) && r.movement_date && r.amount_cents !== null && r.direction);
+  const toIgnore = rows.filter((r) => !selectedIds.has(r.id));
 
   const installmentGroupCache = new Map<number, string>();
 
@@ -264,6 +274,10 @@ export async function confirmImportBatchAction(
     }
 
     return {
+      // Id gerado aqui (não pelo banco) pra vincular linha do lote → transação
+      // sem depender da ordem do INSERT ... RETURNING, e permitir atualizar as
+      // linhas do lote numa única chamada em vez de uma por linha.
+      id: crypto.randomUUID(),
       space_id: spaceId,
       account_id: batch.account_id,
       card_id: batch.card_id,
@@ -277,7 +291,10 @@ export async function confirmImportBatchAction(
       category_id: row.suggested_category_id,
       subcategory_id: row.suggested_subcategory_id,
       origin: "importada" as const,
-      classification_status: row.suggested_nature ? ("classificado" as const) : ("nao_classificado" as const),
+      classification_status: classificationStatusFor(
+        row.suggested_nature ?? "nao_classificado",
+        Boolean(row.suggested_category_id),
+      ),
       classified_by_rule_id: row.suggested_by_rule_id,
       installment_number: installmentNumber,
       installment_total: installmentTotal,
@@ -289,23 +306,21 @@ export async function confirmImportBatchAction(
   });
 
   if (transactionRows.length > 0) {
-    const { data: inserted, error: insertError } = await supabase
-      .from("transactions")
-      .insert(transactionRows)
-      .select("id, dedup_hash");
+    const { error: insertError } = await supabase.from("transactions").insert(transactionRows);
 
     if (insertError) {
       return { error: "Não foi possível importar os lançamentos selecionados." };
     }
 
-    for (let i = 0; i < toImport.length; i++) {
-      const row = toImport[i];
-      const resultingId = inserted?.[i]?.id;
-      await supabase
-        .from("import_batch_rows")
-        .update({ status: "importado", resulting_transaction_id: resultingId })
-        .eq("id", row.id);
-    }
+    // Upsert com as linhas completas (já carregadas acima) = uma chamada para
+    // o lote inteiro, no lugar do antigo loop de um UPDATE por linha.
+    await supabase.from("import_batch_rows").upsert(
+      toImport.map((row, i) => ({
+        ...row,
+        status: "importado" as const,
+        resulting_transaction_id: transactionRows[i].id,
+      })),
+    );
   }
 
   if (toIgnore.length > 0) {
@@ -326,10 +341,7 @@ export async function confirmImportBatchAction(
 
   revalidatePath(`/importar/${batchId}`);
   revalidatePath("/importar");
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
-  revalidatePath("/revisar");
-  revalidatePath("/contas");
+  revalidateTransactionData();
 
   return { imported: transactionRows.length };
 }
@@ -353,7 +365,5 @@ export async function undoImportBatchAction(batchId: string, spaceId: string) {
 
   revalidatePath("/importar");
   revalidatePath(`/importar/${batchId}`);
-  revalidatePath("/transacoes");
-  revalidatePath("/visao-geral");
-  revalidatePath("/contas");
+  revalidateTransactionData();
 }
