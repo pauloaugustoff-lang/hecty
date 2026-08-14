@@ -427,6 +427,10 @@ export type Database = {
           expires_at: string;
         }[];
       };
+      get_account_balances: {
+        Args: { p_space_id: string };
+        Returns: { account_id: string; balance_cents: number }[];
+      };
     };
   };
 }

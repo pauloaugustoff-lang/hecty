@@ -23,33 +23,20 @@ export async function getAccount(id: string): Promise<AccountRow | null> {
   return data;
 }
 
-/** Saldo atual = saldo inicial + soma assinada de todas as movimentações não excluídas. */
+/**
+ * Saldo atual = saldo inicial + soma assinada de todas as movimentações não
+ * excluídas. Soma feita em SQL (get_account_balances) em vez de trazer toda
+ * transação pro JS — contas com centenas/milhares de lançamentos passavam
+ * do limite padrão de linhas do PostgREST, truncando a soma silenciosamente.
+ */
 export async function getAccountBalances(spaceId: string): Promise<Record<string, number>> {
   const supabase = await createClient();
-
-  const [{ data: accounts, error: accountsError }, { data: transactions, error: txError }] = await Promise.all([
-    supabase.from("accounts").select("id, initial_balance_cents").eq("space_id", spaceId),
-    supabase
-      .from("transactions")
-      .select("account_id, amount_cents, direction")
-      .eq("space_id", spaceId)
-      .is("deleted_at", null)
-      .not("account_id", "is", null),
-  ]);
-
-  if (accountsError) throw accountsError;
-  if (txError) throw txError;
+  const { data, error } = await supabase.rpc("get_account_balances", { p_space_id: spaceId });
+  if (error) throw error;
 
   const balances: Record<string, number> = {};
-  for (const account of accounts ?? []) {
-    balances[account.id] = account.initial_balance_cents;
+  for (const row of data ?? []) {
+    balances[row.account_id] = row.balance_cents;
   }
-
-  for (const tx of transactions ?? []) {
-    if (!tx.account_id) continue;
-    const signed = tx.direction === "saida" ? -tx.amount_cents : tx.amount_cents;
-    balances[tx.account_id] = (balances[tx.account_id] ?? 0) + signed;
-  }
-
   return balances;
 }
