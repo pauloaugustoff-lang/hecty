@@ -8,7 +8,8 @@ import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
 import { natureLabels, natureTones } from "@/lib/domain/labels";
-import { formatCentsToBRL } from "@/lib/money/money";
+import { formatCents } from "@/lib/money/money";
+import { transactionCurrency } from "@/lib/domain/transaction-currency";
 import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -225,7 +226,10 @@ export function ReviewTable({
                     ) : null}
                   </Td>
                   <Td className="text-text-secondary">{tx.account?.name ?? tx.card?.name ?? "—"}</Td>
-                  <Td className="text-right tabular font-medium">{formatCentsToBRL(tx.amount_cents)}</Td>
+                  <Td className={`text-right tabular font-medium ${tx.direction === "entrada" ? "text-positive" : "text-text-primary"}`}>
+                    {tx.direction === "saida" ? "−" : "+"}
+                    {formatCents(tx.amount_cents, transactionCurrency(tx))}
+                  </Td>
                   <Td>
                     <Badge tone={natureTones[tx.nature]}>{natureLabels[tx.nature]}</Badge>
                   </Td>

@@ -329,6 +329,7 @@ export async function confirmImportBatchAction(
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
   revalidatePath("/revisar");
+  revalidatePath("/contas");
 
   return { imported: transactionRows.length };
 }
@@ -354,4 +355,5 @@ export async function undoImportBatchAction(batchId: string, spaceId: string) {
   revalidatePath(`/importar/${batchId}`);
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
+  revalidatePath("/contas");
 }

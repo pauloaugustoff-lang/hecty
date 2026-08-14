@@ -221,6 +221,7 @@ export async function createTransactionAction(
   revalidatePath("/visao-geral");
   revalidatePath("/revisar");
   revalidatePath("/planejamento");
+  revalidatePath("/contas");
   return { success: true };
 }
 
@@ -284,6 +285,7 @@ export async function updateTransactionAction(
   revalidatePath("/visao-geral");
   revalidatePath("/revisar");
   revalidatePath("/planejamento");
+  revalidatePath("/contas");
   return { success: true };
 }
 
@@ -352,6 +354,7 @@ export async function deleteTransactionAction(transactionId: string) {
   await supabase.from("transactions").update({ deleted_at: new Date().toISOString() }).eq("id", transactionId);
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
+  revalidatePath("/contas");
 }
 
 export async function deleteTransactionsAction(transactionIds: string[]): Promise<ActionState> {
@@ -371,6 +374,7 @@ export async function deleteTransactionsAction(transactionIds: string[]): Promis
   revalidatePath("/visao-geral");
   revalidatePath("/revisar");
   revalidatePath("/planejamento");
+  revalidatePath("/contas");
   return { success: true };
 }
 
@@ -494,6 +498,7 @@ export async function createTransferAction(
 
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
+  revalidatePath("/contas");
   return { success: true };
 }
 
@@ -554,5 +559,6 @@ export async function createCardPaymentAction(
   revalidatePath("/transacoes");
   revalidatePath("/visao-geral");
   revalidatePath("/cartoes");
+  revalidatePath("/contas");
   return { success: true };
 }
