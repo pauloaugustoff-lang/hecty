@@ -8,6 +8,7 @@ import { normalizeDescription } from "@/lib/import/normalize";
 import { computeDedupHash } from "@/lib/import/dedup";
 import { buildTransferPair } from "@/lib/transactions/transfers";
 import { redemptionNature } from "@/lib/money/redemption";
+import { parseDecimalPtBR } from "@/lib/money/money";
 import { randomUUID } from "node:crypto";
 import type { TransactionNature } from "@/lib/supabase/types";
 
@@ -424,6 +425,7 @@ export async function createTransferAction(
   const movementDate = String(formData.get("movementDate") ?? "");
   const description = String(formData.get("description") ?? "Transferência entre contas");
   const amountCents = Number(formData.get("amountCents") ?? 0);
+  const rateInput = String(formData.get("exchangeRate") ?? "").trim();
 
   if (!fromAccountId || !toAccountId || !movementDate || !amountCents) {
     return { error: "Preencha todos os campos." };
@@ -434,10 +436,23 @@ export async function createTransferAction(
     .from("accounts")
     .select("id, currency")
     .in("id", [fromAccountId, toAccountId]);
-  const fromCurrency = transferAccounts?.find((a) => a.id === fromAccountId)?.currency;
-  const toCurrency = transferAccounts?.find((a) => a.id === toAccountId)?.currency;
-  if (fromCurrency && toCurrency && fromCurrency !== toCurrency) {
-    return { error: `Ainda não é possível transferir entre contas de moedas diferentes (${fromCurrency} → ${toCurrency}).` };
+  const fromCurrency = transferAccounts?.find((a) => a.id === fromAccountId)?.currency ?? "BRL";
+  const toCurrency = transferAccounts?.find((a) => a.id === toAccountId)?.currency ?? "BRL";
+
+  let toAmountCents: number | undefined;
+  let notes = "";
+  if (fromCurrency !== toCurrency) {
+    let rate: number;
+    try {
+      rate = parseDecimalPtBR(rateInput);
+    } catch {
+      return { error: `Informe a cotação usada (1 ${fromCurrency} = ? ${toCurrency}).` };
+    }
+    if (rate <= 0) {
+      return { error: "A cotação deve ser maior que zero." };
+    }
+    toAmountCents = Math.round(amountCents * rate);
+    notes = `Câmbio: 1 ${fromCurrency} = ${rate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${toCurrency}`;
   }
 
   let pair;
@@ -447,8 +462,10 @@ export async function createTransferAction(
       fromAccountId,
       toAccountId,
       amountCents,
+      toAmountCents,
       movementDate,
       description,
+      notes,
       newId: () => randomUUID(),
     });
   } catch (e) {
@@ -456,7 +473,7 @@ export async function createTransferAction(
   }
 
   const supabase = await createClient();
-  const dedupBase = { spaceId, movementDate, amountCents, description };
+  const dedupBase = { spaceId, movementDate, description };
 
   const rows = pair.map((leg) => ({
     ...leg,
@@ -464,6 +481,7 @@ export async function createTransferAction(
       ...dedupBase,
       accountId: leg.account_id,
       cardId: null,
+      amountCents: leg.amount_cents,
       direction: leg.direction,
     }),
     classification_status: "classificado" as const,

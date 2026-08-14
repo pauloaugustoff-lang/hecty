@@ -5,7 +5,7 @@ import { ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { createTransferAction, type TransferActionState } from "./actions";
 import type { AccountRow } from "@/lib/data/accounts";
-import { parseBRLToCents } from "@/lib/money/money";
+import { parseBRLToCents, parseDecimalPtBR, formatCents } from "@/lib/money/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,10 +31,11 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
   const [fromAccountId, setFromAccountId] = useState("");
   const [toAccountId, setToAccountId] = useState("");
   const [amountInput, setAmountInput] = useState("");
+  const [rateInput, setRateInput] = useState("");
 
   const fromCurrency = accounts.find((a) => a.id === fromAccountId)?.currency;
-  // Sem conversão automática ainda, só permite transferir entre contas da mesma moeda.
-  const eligibleToAccounts = accounts.filter((a) => a.id !== fromAccountId && (!fromCurrency || a.currency === fromCurrency));
+  const toCurrency = accounts.find((a) => a.id === toAccountId)?.currency;
+  const isCrossCurrency = Boolean(fromCurrency && toCurrency && fromCurrency !== toCurrency);
 
   useEffect(() => {
     if (state.success) {
@@ -49,6 +50,14 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
   } catch {
     amountCents = 0;
   }
+
+  let rate: number | null = null;
+  try {
+    rate = rateInput ? parseDecimalPtBR(rateInput) : null;
+  } catch {
+    rate = null;
+  }
+  const convertedCents = isCrossCurrency && rate && amountCents ? Math.round(amountCents * rate) : null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -73,26 +82,18 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
           <input type="hidden" name="fromAccountId" value={fromAccountId} />
           <input type="hidden" name="toAccountId" value={toAccountId} />
           <input type="hidden" name="amountCents" value={amountCents} />
+          {isCrossCurrency ? <input type="hidden" name="exchangeRate" value={rateInput} /> : null}
 
           <div>
             <Label htmlFor="fromAccountId">De</Label>
-            <Select
-              value={fromAccountId}
-              onValueChange={(v) => {
-                setFromAccountId(v);
-                const newFromCurrency = accounts.find((a) => a.id === v)?.currency;
-                if (toAccountId && accounts.find((a) => a.id === toAccountId)?.currency !== newFromCurrency) {
-                  setToAccountId("");
-                }
-              }}
-            >
+            <Select value={fromAccountId} onValueChange={setFromAccountId}>
               <SelectTrigger id="fromAccountId">
                 <SelectValue placeholder="Conta de origem" />
               </SelectTrigger>
               <SelectContent>
                 {accounts.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
-                    {a.name}
+                    {a.name} ({a.currency})
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -105,22 +106,17 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
                 <SelectValue placeholder="Conta de destino" />
               </SelectTrigger>
               <SelectContent>
-                {eligibleToAccounts.map((a) => (
+                {accounts.filter((a) => a.id !== fromAccountId).map((a) => (
                   <SelectItem key={a.id} value={a.id}>
-                    {a.name}
+                    {a.name} ({a.currency})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {fromAccountId && eligibleToAccounts.length === 0 ? (
-              <p className="mt-1 text-[11px] text-text-tertiary">
-                Nenhuma outra conta em {fromCurrency} — transferência entre moedas diferentes ainda não é suportada.
-              </p>
-            ) : null}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="amount">Valor</Label>
+              <Label htmlFor="amount">Valor {fromCurrency ? `(${fromCurrency})` : ""}</Label>
               <Input id="amount" inputMode="decimal" required value={amountInput} onChange={(e) => setAmountInput(e.target.value)} placeholder="0,00" />
             </div>
             <div>
@@ -128,6 +124,28 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
               <Input id="movementDate" name="movementDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
             </div>
           </div>
+
+          {isCrossCurrency ? (
+            <div className="rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-3">
+              <Label htmlFor="exchangeRate">
+                Cotação (1 {fromCurrency} = ? {toCurrency})
+              </Label>
+              <Input
+                id="exchangeRate"
+                inputMode="decimal"
+                required
+                value={rateInput}
+                onChange={(e) => setRateInput(e.target.value)}
+                placeholder="Ex.: 5,20"
+              />
+              <p className="mt-1.5 text-[11px] text-text-secondary">
+                {convertedCents !== null
+                  ? `A conta de destino recebe ${formatCents(convertedCents, toCurrency)}.`
+                  : "Informe a cotação usada nessa transferência para calcular quanto entra na conta de destino."}
+              </p>
+            </div>
+          ) : null}
+
           <div>
             <Label htmlFor="description">Descrição</Label>
             <Input id="description" name="description" defaultValue="Transferência entre contas" />
@@ -139,7 +157,11 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
                 Cancelar
               </Button>
             </DialogClose>
-            <Button type="submit" variant="primary" disabled={isPending || !fromAccountId || !toAccountId}>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={isPending || !fromAccountId || !toAccountId || (isCrossCurrency && !rate)}
+            >
               {isPending ? "Salvando…" : "Transferir"}
             </Button>
           </DialogFooter>

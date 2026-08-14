@@ -71,6 +71,40 @@ describe("buildTransferPair", () => {
     ).toThrow();
   });
 
+  it("aceita valores diferentes por perna (transferência entre moedas)", () => {
+    const [out, inn] = buildTransferPair({
+      spaceId: "space-1",
+      fromAccountId: "acc-brl",
+      toAccountId: "acc-usd",
+      amountCents: 100_000,
+      toAmountCents: 19_230,
+      movementDate: "2026-03-05",
+      description: "Compra de dólares",
+      notes: "Câmbio: 1 BRL = 0,1923 USD",
+      newId: idSequence(),
+    });
+
+    expect(out.amount_cents).toBe(100_000);
+    expect(inn.amount_cents).toBe(19_230);
+    expect(out.notes).toBe("Câmbio: 1 BRL = 0,1923 USD");
+    expect(inn.notes).toBe("Câmbio: 1 BRL = 0,1923 USD");
+  });
+
+  it("rejeita valor convertido zero ou negativo", () => {
+    expect(() =>
+      buildTransferPair({
+        spaceId: "space-1",
+        fromAccountId: "acc-1",
+        toAccountId: "acc-2",
+        amountCents: 1_000,
+        toAmountCents: 0,
+        movementDate: "2026-03-05",
+        description: "Transferência",
+        newId: idSequence(),
+      }),
+    ).toThrow();
+  });
+
   it("rejeita valor zero ou negativo", () => {
     expect(() =>
       buildTransferPair({

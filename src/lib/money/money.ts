@@ -42,10 +42,11 @@ export function formatCentsToBRL(cents: Cents, options?: { signed?: boolean }): 
 }
 
 /**
- * Converte um valor digitado pelo usuário (ex.: "1.234,56" ou "1234.56")
- * em centavos inteiros. Lança erro se o texto não for um número válido.
+ * Interpreta um número digitado pelo usuário em formato brasileiro ou
+ * americano (ex.: "1.234,56" ou "1234.56") e devolve o valor decimal puro.
+ * Lança erro se o texto não for um número válido.
  */
-export function parseBRLToCents(input: string): Cents {
+export function parseDecimalPtBR(input: string): number {
   const trimmed = input.trim();
   if (trimmed === "") {
     throw new Error("Valor vazio.");
@@ -54,7 +55,7 @@ export function parseBRLToCents(input: string): Cents {
   let normalized = trimmed.replace(/[^\d,.-]/g, "");
 
   if (!/\d/.test(normalized)) {
-    throw new Error(`Valor monetário inválido: "${input}"`);
+    throw new Error(`Valor inválido: "${input}"`);
   }
 
   const hasComma = normalized.includes(",");
@@ -69,10 +70,18 @@ export function parseBRLToCents(input: string): Cents {
 
   const value = Number(normalized);
   if (!Number.isFinite(value)) {
-    throw new Error(`Valor monetário inválido: "${input}"`);
+    throw new Error(`Valor inválido: "${input}"`);
   }
 
-  return Math.round(value * 100);
+  return value;
+}
+
+/**
+ * Converte um valor digitado pelo usuário (ex.: "1.234,56" ou "1234.56")
+ * em centavos inteiros. Lança erro se o texto não for um número válido.
+ */
+export function parseBRLToCents(input: string): Cents {
+  return Math.round(parseDecimalPtBR(input) * 100);
 }
 
 /** Valor com sinal: entradas positivas, saídas negativas. */
