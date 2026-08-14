@@ -10,6 +10,7 @@ import type { TransactionWithRelations, TransactionSortBy } from "@/lib/data/tra
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
+import type { TagRow } from "@/lib/data/tags";
 import { natureLabels, natureTones } from "@/lib/domain/labels";
 import { formatCentsToBRL } from "@/lib/money/money";
 import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
@@ -44,12 +45,14 @@ export function TransactionsTable({
   accounts,
   cards,
   categories,
+  tags,
 }: {
   spaceId: string;
   transactions: TransactionWithRelations[];
   accounts: AccountRow[];
   cards: CardRow[];
   categories: CategoryRow[];
+  tags: TagRow[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
@@ -167,6 +170,7 @@ export function TransactionsTable({
                     accounts={accounts}
                     cards={cards}
                     categories={categories}
+                    tags={tags}
                     transaction={tx}
                     trigger={
                       <button className="text-left font-medium text-text-primary hover:text-accent">
@@ -199,6 +203,7 @@ export function TransactionsTable({
                       accounts={accounts}
                       cards={cards}
                       categories={categories}
+                      tags={tags}
                       transaction={tx}
                       trigger={
                         <Button variant="ghost" size="icon" aria-label={`Editar ${tx.original_description}`}>

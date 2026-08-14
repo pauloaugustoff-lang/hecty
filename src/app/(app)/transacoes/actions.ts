@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { transactionFormSchema, redemptionBreakdownSchema } from "@/lib/validation/schemas";
+import { transactionFormSchema, redemptionBreakdownSchema, tagFormSchema } from "@/lib/validation/schemas";
+import type { TagRow } from "@/lib/data/tags";
 import { normalizeDescription } from "@/lib/import/normalize";
 import { computeDedupHash } from "@/lib/import/dedup";
 import { buildTransferPair } from "@/lib/transactions/transfers";
@@ -77,9 +78,41 @@ function parseTransactionFormData(formData: FormData) {
     subcategoryId: subcategoryId ? String(subcategoryId) : null,
     counterparty: formData.get("counterparty") ?? "",
     notes: formData.get("notes") ?? "",
-    tags: [],
+    tags: formData.getAll("tags").map(String),
     linkedExpenseIds: formData.getAll("linkedExpenseIds").map(String),
   });
+}
+
+export interface TagActionState {
+  error?: string;
+  success?: boolean;
+  tag?: TagRow;
+}
+
+/** Usado no picker de tags do lançamento ("+ Criar tag"). */
+export async function createTagAction(spaceId: string, _prev: TagActionState, formData: FormData): Promise<TagActionState> {
+  const parsed = tagFormSchema.safeParse({
+    name: formData.get("name"),
+    color: formData.get("color") ?? "#8b5cf6",
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const supabase = await createClient();
+  const { data: tag, error } = await supabase
+    .from("tags")
+    .insert({ space_id: spaceId, name: parsed.data.name, color: parsed.data.color })
+    .select("*")
+    .single();
+
+  if (error || !tag) {
+    return { error: "Não foi possível criar a tag." };
+  }
+
+  revalidatePath("/transacoes");
+  revalidatePath("/visao-geral");
+  return { success: true, tag };
 }
 
 /** Substitui os vínculos de um reembolso/estorno pelas despesas selecionadas.
@@ -166,6 +199,7 @@ export async function createTransactionAction(
       subcategory_id: parsed.data.subcategoryId,
       counterparty: parsed.data.counterparty,
       notes: parsed.data.notes,
+      tags: parsed.data.tags,
       origin: "manual",
       classification_status: classificationStatusFor(parsed.data.nature, Boolean(parsed.data.categoryId)),
       dedup_hash: dedupHash,
@@ -228,6 +262,7 @@ export async function updateTransactionAction(
       subcategory_id: parsed.data.subcategoryId,
       counterparty: parsed.data.counterparty,
       notes: parsed.data.notes,
+      tags: parsed.data.tags,
       classification_status: classificationStatusFor(parsed.data.nature, Boolean(parsed.data.categoryId)),
       dedup_hash: dedupHash,
     })

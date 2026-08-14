@@ -5,6 +5,7 @@ import { listTransactions } from "@/lib/data/transactions";
 import { listAccounts } from "@/lib/data/accounts";
 import { listCards } from "@/lib/data/cards";
 import { listCategories } from "@/lib/data/categories";
+import { listTags } from "@/lib/data/tags";
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
@@ -28,10 +29,11 @@ export default async function TransacoesPage({
   const space = await requireCurrentSpace();
   const offset = Number(params.offset ?? 0);
 
-  const [accounts, cards, categories, { rows, count }] = await Promise.all([
+  const [accounts, cards, categories, tags, { rows, count }] = await Promise.all([
     listAccounts(space.id),
     listCards(space.id),
     listCategories(space.id),
+    listTags(space.id),
     listTransactions(space.id, {
       from: params.from,
       to: params.to,
@@ -41,6 +43,7 @@ export default async function TransacoesPage({
       subcategoryId: params.subcategoryId,
       nature: params.nature as TransactionNature | undefined,
       direction: params.direction as TransactionDirection | undefined,
+      tag: params.tag,
       search: params.search,
       minAmountCents: params.minAmount ? Number(params.minAmount) : undefined,
       maxAmountCents: params.maxAmount ? Number(params.maxAmount) : undefined,
@@ -69,13 +72,13 @@ export default async function TransacoesPage({
           <>
             <CardPaymentDialog spaceId={space.id} accounts={accounts} cards={cards} />
             <TransferDialog spaceId={space.id} accounts={accounts} />
-            <TransactionFormDialog spaceId={space.id} accounts={accounts} cards={cards} categories={categories} />
+            <TransactionFormDialog spaceId={space.id} accounts={accounts} cards={cards} categories={categories} tags={tags} />
           </>
         }
       />
 
       <Suspense>
-        <TransactionFilters accounts={accounts} cards={cards} categories={categories} />
+        <TransactionFilters accounts={accounts} cards={cards} categories={categories} tags={tags} />
       </Suspense>
 
       {rows.length === 0 ? (
@@ -85,7 +88,7 @@ export default async function TransacoesPage({
           description="Ajuste os filtros ou lance sua primeira movimentação manualmente, ou importe um extrato."
           action={
             <div className="flex gap-2">
-              <TransactionFormDialog spaceId={space.id} accounts={accounts} cards={cards} categories={categories} />
+              <TransactionFormDialog spaceId={space.id} accounts={accounts} cards={cards} categories={categories} tags={tags} />
               <Button asChild variant="secondary">
                 <Link href="/importar">Importar extrato</Link>
               </Button>
@@ -95,7 +98,7 @@ export default async function TransacoesPage({
       ) : (
         <>
           <Suspense>
-            <TransactionsTable spaceId={space.id} transactions={rows} accounts={accounts} cards={cards} categories={categories} />
+            <TransactionsTable spaceId={space.id} transactions={rows} accounts={accounts} cards={cards} categories={categories} tags={tags} />
           </Suspense>
 
           <div className="mt-4 flex items-center justify-between text-sm text-text-secondary">

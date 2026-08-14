@@ -53,6 +53,12 @@ export const categoryFormSchema = z.object({
 });
 export type CategoryFormInput = z.infer<typeof categoryFormSchema>;
 
+export const tagFormSchema = z.object({
+  name: z.string().trim().min(1, "Informe um nome para a tag.").max(40),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Cor inválida."),
+});
+export type TagFormInput = z.infer<typeof tagFormSchema>;
+
 export const redemptionBreakdownSchema = z
   .object({
     totalAmountCents: z.number().int().positive(),

@@ -103,6 +103,14 @@ export type CategoryRow = {
   updated_at: string;
 }
 
+export type TagRow = {
+  id: string;
+  space_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
 export type AccountRow = {
   id: string;
   space_id: string;
@@ -322,6 +330,12 @@ export type Database = {
         Row: CategoryRow;
         Insert: Partial<CategoryRow> & { space_id: string; name: string };
         Update: Partial<CategoryRow>;
+        Relationships: [];
+      };
+      tags: {
+        Row: TagRow;
+        Insert: Partial<TagRow> & { space_id: string; name: string };
+        Update: Partial<TagRow>;
         Relationships: [];
       };
       accounts: {

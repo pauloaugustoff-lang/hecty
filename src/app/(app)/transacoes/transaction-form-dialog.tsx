@@ -7,6 +7,7 @@ import {
   createTransactionAction,
   updateTransactionAction,
   searchExpenseTransactionsAction,
+  createTagAction,
   type ActionState,
   type ExpenseSearchResult,
 } from "./actions";
@@ -15,6 +16,7 @@ import type { TransactionWithRelations } from "@/lib/data/transactions";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
+import type { TagRow } from "@/lib/data/tags";
 import type { TransactionNature, TransactionDirection, CategoryKind } from "@/lib/supabase/types";
 import { natureLabels } from "@/lib/domain/labels";
 import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
@@ -79,6 +81,7 @@ export function TransactionFormDialog({
   accounts,
   cards,
   categories,
+  tags,
   transaction,
   trigger,
 }: {
@@ -86,6 +89,7 @@ export function TransactionFormDialog({
   accounts: AccountRow[];
   cards: CardRow[];
   categories: CategoryRow[];
+  tags: TagRow[];
   transaction?: TransactionWithRelations;
   trigger?: React.ReactNode;
 }) {
@@ -134,6 +138,15 @@ export function TransactionFormDialog({
   const [newSubcategoryColor, setNewSubcategoryColor] = useState(CATEGORY_COLORS[0]);
   const [isCreatingCategory, startCreateCategoryTransition] = useTransition();
 
+  // Tags: marcação transversal (ex.: "Viagem Tiradentes") independente de
+  // categoria — o vínculo em si mora em transactions.tags (text[] de nomes);
+  // esta tabela só dá nome canônico + cor, pra autocomplete e evitar
+  // duplicidade por digitação.
+  const [localTags, setLocalTags] = useState<TagRow[]>(tags);
+  const [selectedTagNames, setSelectedTagNames] = useState<string[]>(transaction?.tags ?? []);
+  const [tagSearch, setTagSearch] = useState("");
+  const [isCreatingTag, startCreateTagTransition] = useTransition();
+
   const isRedemption = nature === "resgate_investimento" || nature === "resgate_a_decompor";
   const isReimbursing = nature === "reembolso" || nature === "estorno";
   const linkedExpensesTotal = linkedExpenses.reduce((sum, e) => sum + e.amount_cents, 0);
@@ -149,6 +162,13 @@ export function TransactionFormDialog({
     [localCategories, categoryId],
   );
   const selectedParentCategory = useMemo(() => localCategories.find((c) => c.id === categoryId), [localCategories, categoryId]);
+
+  const tagResults = useMemo(() => {
+    const query = tagSearch.trim().toLowerCase();
+    if (!query) return [];
+    return sortByName(localTags.filter((t) => !selectedTagNames.includes(t.name) && t.name.toLowerCase().includes(query)));
+  }, [localTags, tagSearch, selectedTagNames]);
+  const hasExactTagMatch = localTags.some((t) => t.name.toLowerCase() === tagSearch.trim().toLowerCase());
 
   function changeNature(next: TransactionNature) {
     if (categoryKindFor(next, direction) !== categoryKind) {
@@ -254,6 +274,25 @@ export function TransactionFormDialog({
     });
   }
 
+  function handleCreateTag() {
+    const name = tagSearch.trim();
+    if (!name || hasExactTagMatch) return;
+    const fd = new FormData();
+    fd.set("name", name);
+    fd.set("color", CATEGORY_COLORS[localTags.length % CATEGORY_COLORS.length]);
+    startCreateTagTransition(async () => {
+      const result = await createTagAction(spaceId, {}, fd);
+      if (result.error || !result.tag) {
+        toast.error(result.error ?? "Não foi possível criar a tag.");
+        return;
+      }
+      setLocalTags((prev) => [...prev, result.tag!]);
+      setSelectedTagNames((prev) => [...prev, result.tag!.name]);
+      setTagSearch("");
+      toast.success("Tag criada");
+    });
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -289,6 +328,9 @@ export function TransactionFormDialog({
           <input type="hidden" name="subcategoryId" value={subcategoryId} />
           {linkedExpenses.map((e) => (
             <input key={e.id} type="hidden" name="linkedExpenseIds" value={e.id} />
+          ))}
+          {selectedTagNames.map((t) => (
+            <input key={t} type="hidden" name="tags" value={t} />
           ))}
 
           <div className="flex gap-1 rounded-[var(--radius-md)] border border-border p-1">
@@ -637,6 +679,79 @@ export function TransactionFormDialog({
               <Label htmlFor="counterparty">Estabelecimento / contraparte</Label>
               <Input id="counterparty" name="counterparty" defaultValue={transaction?.counterparty} />
             </div>
+
+            <div className="col-span-2">
+              <Label>Tags</Label>
+              <p className="mb-1.5 -mt-0.5 text-[11px] text-text-tertiary">
+                Marcação livre pra somar lançamentos que atravessam várias categorias — ex.: uma viagem.
+              </p>
+
+              {selectedTagNames.length > 0 ? (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {selectedTagNames.map((name) => {
+                    const color = localTags.find((t) => t.name === name)?.color ?? "#94a3b8";
+                    return (
+                      <span
+                        key={name}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px]"
+                        style={{ backgroundColor: `${color}26`, color }}
+                      >
+                        {name}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTagNames((prev) => prev.filter((n) => n !== name))}
+                          aria-label={`Remover tag ${name}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
+                <Input
+                  value={tagSearch}
+                  onChange={(e) => setTagSearch(e.target.value)}
+                  placeholder="Buscar ou criar uma tag…"
+                  className="pl-8"
+                />
+              </div>
+              {tagSearch.trim() ? (
+                <div className="relative">
+                  <div className="absolute z-10 mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface-overlay shadow-[var(--shadow-md)]">
+                    {tagResults.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedTagNames((prev) => [...prev, t.name]);
+                          setTagSearch("");
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-surface-sunken"
+                      >
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+                        {t.name}
+                      </button>
+                    ))}
+                    {!hasExactTagMatch ? (
+                      <button
+                        type="button"
+                        onClick={handleCreateTag}
+                        disabled={isCreatingTag}
+                        className="flex w-full items-center gap-1 border-t border-border-subtle px-3 py-2 text-left text-[13px] text-accent hover:bg-surface-sunken"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        {isCreatingTag ? "Criando…" : `Criar tag "${tagSearch.trim()}"`}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <div className="col-span-2">
               <Label htmlFor="notes">Observações</Label>
               <Textarea id="notes" name="notes" defaultValue={transaction?.notes} rows={2} />

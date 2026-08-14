@@ -32,6 +32,7 @@ export interface TransactionFilters {
   subcategoryId?: string;
   nature?: TransactionNature;
   direction?: TransactionDirection;
+  tag?: string;
   onlyUnclassified?: boolean;
   search?: string;
   minAmountCents?: number;
@@ -102,6 +103,7 @@ export async function listTransactions(
   else if (filters.categoryId) query = query.eq("category_id", filters.categoryId);
   if (filters.nature) query = query.eq("nature", filters.nature);
   if (filters.direction) query = query.eq("direction", filters.direction);
+  if (filters.tag) query = query.contains("tags", [filters.tag]);
   if (filters.onlyUnclassified) query = query.neq("classification_status", "classificado");
   if (filters.search) {
     query = query.ilike("normalized_description", `%${filters.search.toUpperCase()}%`);

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { computeDashboardMetrics, type DashboardTransactionInput, type DashboardMetrics } from "@/lib/domain/dashboard-metrics";
 import { analyzeRedemption } from "@/lib/money/redemption";
 import { REVENUE_NATURES } from "@/lib/domain/labels";
+import { listTags } from "@/lib/data/tags";
 import { format, startOfMonth, subMonths } from "date-fns";
 
 const REIMBURSING_NATURES = ["reembolso", "estorno"] as const;
@@ -22,6 +23,7 @@ interface RawTx {
   category: { name: string; color: string } | null;
   subcategory_id: string | null;
   subcategory: { name: string; color: string } | null;
+  tags: string[];
   // redemption_details.transaction_id é chave primária (relação 1:1), então
   // o PostgREST retorna um objeto único aqui, não um array.
   redemption_details: {
@@ -44,7 +46,7 @@ async function fetchTransactions(spaceId: string, from: string, to: string): Pro
   const { data, error } = await supabase
     .from("transactions")
     .select(
-      "id, amount_cents, direction, nature, classification_status, movement_date, competence_date, category_id, category:categories!transactions_category_id_fkey(name, color), subcategory_id, subcategory:categories!transactions_subcategory_id_fkey(name, color), redemption_details(*)",
+      "id, amount_cents, direction, nature, classification_status, movement_date, competence_date, category_id, category:categories!transactions_category_id_fkey(name, color), subcategory_id, subcategory:categories!transactions_subcategory_id_fkey(name, color), tags, redemption_details(*)",
     )
     .eq("space_id", spaceId)
     .is("deleted_at", null)
@@ -263,4 +265,33 @@ export async function getRevenueBreakdown(spaceId: string, from: string, to: str
 export async function getInvestmentBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
   const rows = await fetchTransactions(spaceId, from, to);
   return buildCategoryBreakdown(rows, "saida", (nature) => nature === "aplicacao_financeira");
+}
+
+// Gasto por tag: marcação transversal a categoria (ex.: "Viagem Tiradentes"
+// cobrindo hospedagem, restaurante, compras). Uma despesa pode ter mais de
+// uma tag — nesse caso entra no total de cada uma (não divide o valor).
+export async function getTagBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
+  const [rows, tags] = await Promise.all([fetchTransactions(spaceId, from, to), listTags(spaceId)]);
+  const colorByTagName = new Map(tags.map((t) => [t.name, t.color]));
+
+  const buckets = new Map<string, CategoryBreakdownPoint>();
+  for (const row of rows) {
+    if (row.direction !== "saida" || row.nature !== "despesa") continue;
+    for (const tagName of row.tags) {
+      const existing = buckets.get(tagName);
+      if (existing) {
+        existing.amountCents += row.amount_cents;
+      } else {
+        buckets.set(tagName, {
+          categoryId: tagName,
+          name: tagName,
+          color: colorByTagName.get(tagName) ?? "#94a3b8",
+          amountCents: row.amount_cents,
+          subcategories: [],
+        });
+      }
+    }
+  }
+
+  return Array.from(buckets.values()).sort((a, b) => b.amountCents - a.amountCents);
 }

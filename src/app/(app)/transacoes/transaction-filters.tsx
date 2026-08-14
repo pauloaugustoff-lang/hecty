@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
+import type { TagRow } from "@/lib/data/tags";
 import { natureLabels } from "@/lib/domain/labels";
 import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
 import { sortByName, sortEntriesByLabel } from "@/lib/utils/sort";
@@ -25,10 +26,12 @@ export function TransactionFilters({
   accounts,
   cards,
   categories,
+  tags,
 }: {
   accounts: AccountRow[];
   cards: CardRow[];
   categories: CategoryRow[];
+  tags: TagRow[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -250,6 +253,21 @@ export function TransactionFilters({
           ))}
         </SelectContent>
       </Select>
+      {tags.length > 0 ? (
+        <Select value={searchParams.get("tag") ?? "all"} onValueChange={(v) => updateParam("tag", v === "all" ? "" : v)}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Tag" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as tags</SelectItem>
+            {sortByName(tags).map((t) => (
+              <SelectItem key={t.id} value={t.name}>
+                {t.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
     </div>
   );
 }
