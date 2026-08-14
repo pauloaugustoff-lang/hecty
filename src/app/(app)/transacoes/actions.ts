@@ -429,6 +429,17 @@ export async function createTransferAction(
     return { error: "Preencha todos os campos." };
   }
 
+  const supabaseForCheck = await createClient();
+  const { data: transferAccounts } = await supabaseForCheck
+    .from("accounts")
+    .select("id, currency")
+    .in("id", [fromAccountId, toAccountId]);
+  const fromCurrency = transferAccounts?.find((a) => a.id === fromAccountId)?.currency;
+  const toCurrency = transferAccounts?.find((a) => a.id === toAccountId)?.currency;
+  if (fromCurrency && toCurrency && fromCurrency !== toCurrency) {
+    return { error: `Ainda não é possível transferir entre contas de moedas diferentes (${fromCurrency} → ${toCurrency}).` };
+  }
+
   let pair;
   try {
     pair = buildTransferPair({

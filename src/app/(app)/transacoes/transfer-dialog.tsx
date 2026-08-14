@@ -32,6 +32,10 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
   const [toAccountId, setToAccountId] = useState("");
   const [amountInput, setAmountInput] = useState("");
 
+  const fromCurrency = accounts.find((a) => a.id === fromAccountId)?.currency;
+  // Sem conversão automática ainda, só permite transferir entre contas da mesma moeda.
+  const eligibleToAccounts = accounts.filter((a) => a.id !== fromAccountId && (!fromCurrency || a.currency === fromCurrency));
+
   useEffect(() => {
     if (state.success) {
       toast.success("Transferência registrada");
@@ -72,7 +76,16 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
 
           <div>
             <Label htmlFor="fromAccountId">De</Label>
-            <Select value={fromAccountId} onValueChange={setFromAccountId}>
+            <Select
+              value={fromAccountId}
+              onValueChange={(v) => {
+                setFromAccountId(v);
+                const newFromCurrency = accounts.find((a) => a.id === v)?.currency;
+                if (toAccountId && accounts.find((a) => a.id === toAccountId)?.currency !== newFromCurrency) {
+                  setToAccountId("");
+                }
+              }}
+            >
               <SelectTrigger id="fromAccountId">
                 <SelectValue placeholder="Conta de origem" />
               </SelectTrigger>
@@ -92,13 +105,18 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
                 <SelectValue placeholder="Conta de destino" />
               </SelectTrigger>
               <SelectContent>
-                {accounts.filter((a) => a.id !== fromAccountId).map((a) => (
+                {eligibleToAccounts.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
                     {a.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {fromAccountId && eligibleToAccounts.length === 0 ? (
+              <p className="mt-1 text-[11px] text-text-tertiary">
+                Nenhuma outra conta em {fromCurrency} — transferência entre moedas diferentes ainda não é suportada.
+              </p>
+            ) : null}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

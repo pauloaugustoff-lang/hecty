@@ -13,13 +13,14 @@ import {
 } from "./actions";
 import { createCategoryAction } from "../configuracoes/categorias/actions";
 import type { TransactionWithRelations } from "@/lib/data/transactions";
+import { transactionCurrency } from "@/lib/domain/transaction-currency";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
 import type { TagRow } from "@/lib/data/tags";
 import type { TransactionNature, TransactionDirection, CategoryKind } from "@/lib/supabase/types";
 import { natureLabels } from "@/lib/domain/labels";
-import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
+import { parseBRLToCents, formatCentsToBRL, formatCents } from "@/lib/money/money";
 import { getStatementPeriod } from "@/lib/transactions/cards";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -108,7 +109,7 @@ export function TransactionFormDialog({
   const [categoryId, setCategoryId] = useState(transaction?.category_id ?? "");
   const [subcategoryId, setSubcategoryId] = useState(transaction?.subcategory_id ?? "");
   const [amountInput, setAmountInput] = useState(
-    transaction ? formatCentsToBRL(transaction.amount_cents).replace("R$", "").trim() : "",
+    transaction ? formatCents(transaction.amount_cents, transactionCurrency(transaction)).replace(/[^\d,.-]/g, "").trim() : "",
   );
   const [movementDate, setMovementDate] = useState(transaction?.movement_date ?? new Date().toISOString().slice(0, 10));
   const [competenceDate, setCompetenceDate] = useState(transaction?.competence_date ?? "");
@@ -192,6 +193,11 @@ export function TransactionFormDialog({
       ? ["", source.slice(5)]
       : ["", ""];
   const selectedCard = cards.find((c) => c.id === cardId);
+  // Cartão não tem moeda própria — usa a da conta que paga a fatura.
+  const selectedCurrency =
+    accounts.find((a) => a.id === accountId)?.currency ??
+    accounts.find((a) => a.id === selectedCard?.payment_account_id)?.currency ??
+    "BRL";
 
   // Compra no cartão: sugere automaticamente a data de vencimento da fatura
   // (quando o dinheiro sai da conta) a partir do ciclo do cartão. O usuário
@@ -361,7 +367,7 @@ export function TransactionFormDialog({
               />
             </div>
             <div>
-              <Label htmlFor="amount">Valor</Label>
+              <Label htmlFor="amount">Valor {selectedCurrency !== "BRL" ? `(${selectedCurrency})` : ""}</Label>
               <Input id="amount" inputMode="decimal" required value={amountInput} onChange={(e) => setAmountInput(e.target.value)} placeholder="0,00" />
             </div>
             <div>

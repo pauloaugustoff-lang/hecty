@@ -6,20 +6,39 @@
 
 export type Cents = number;
 
-const BRL_FORMATTER = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-});
+/** Moedas com conta cadastrável hoje. Conversão automática entre elas ainda não existe. */
+export const CURRENCIES = ["BRL", "USD", "EUR"] as const;
+export type CurrencyCode = (typeof CURRENCIES)[number];
 
-const BRL_FORMATTER_SIGNED = new Intl.NumberFormat("pt-BR", {
-  style: "currency",
-  currency: "BRL",
-  signDisplay: "always",
-});
+export const CURRENCY_LABELS: Record<CurrencyCode, string> = {
+  BRL: "Real (R$)",
+  USD: "Dólar (US$)",
+  EUR: "Euro (€)",
+};
+
+const formatterCache = new Map<string, Intl.NumberFormat>();
+
+function getFormatter(currency: string, signed: boolean): Intl.NumberFormat {
+  const key = `${currency}:${signed}`;
+  let formatter = formatterCache.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency,
+      signDisplay: signed ? "always" : "auto",
+    });
+    formatterCache.set(key, formatter);
+  }
+  return formatter;
+}
+
+/** Formata centavos numa moeda qualquer (padrão BRL, pra não quebrar chamadores existentes). */
+export function formatCents(cents: Cents, currency: string = "BRL", options?: { signed?: boolean }): string {
+  return getFormatter(currency, Boolean(options?.signed)).format(cents / 100);
+}
 
 export function formatCentsToBRL(cents: Cents, options?: { signed?: boolean }): string {
-  const reais = cents / 100;
-  return options?.signed ? BRL_FORMATTER_SIGNED.format(reais) : BRL_FORMATTER.format(reais);
+  return formatCents(cents, "BRL", options);
 }
 
 /**

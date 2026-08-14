@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
+import { getNonBrlAccountAndCardIds } from "@/lib/data/dashboard";
 
 export type BudgetRow = Database["public"]["Tables"]["budgets"]["Row"];
 
@@ -20,19 +21,26 @@ export async function getActualSpendByCategory(
   to: string,
 ): Promise<Record<string, number>> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("id, category_id, amount_cents, direction, nature")
-    .eq("space_id", spaceId)
-    .eq("nature", "despesa")
-    .eq("direction", "saida")
-    .is("deleted_at", null)
-    .gte("competence_date", from)
-    .lte("competence_date", to);
+  const [{ data, error }, { accountIds: nonBrlAccountIds, cardIds: nonBrlCardIds }] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("id, category_id, amount_cents, direction, nature, account_id, card_id")
+      .eq("space_id", spaceId)
+      .eq("nature", "despesa")
+      .eq("direction", "saida")
+      .is("deleted_at", null)
+      .gte("competence_date", from)
+      .lte("competence_date", to),
+    getNonBrlAccountAndCardIds(spaceId),
+  ]);
 
   if (error) throw error;
 
-  const rows = data ?? [];
+  // Mesma regra do dashboard: sem conversão automática ainda, despesas em
+  // contas/cartões de moeda diferente de BRL ficam fora do total do orçamento.
+  const rows = (data ?? []).filter(
+    (tx) => !(tx.account_id && nonBrlAccountIds.has(tx.account_id)) && !(tx.card_id && nonBrlCardIds.has(tx.card_id)),
+  );
   const despesaIds = rows.map((tx) => tx.id);
   const reductionByDespesaId = new Map<string, number>();
 

@@ -36,6 +36,25 @@ interface RawTx {
   } | null;
 }
 
+// Painéis agregados (Resultado econômico, Gastos por categoria etc.) ainda
+// somam amount_cents cru, assumindo uma única moeda — conversão automática
+// entre moedas ainda não existe. Até existir, lançamentos de contas (ou
+// cartões pagos por uma conta) que não sejam BRL ficam de fora dessas somas,
+// em vez de contar errado como se fossem reais.
+export async function getNonBrlAccountAndCardIds(spaceId: string): Promise<{ accountIds: Set<string>; cardIds: Set<string> }> {
+  const supabase = await createClient();
+  const [{ data: accounts }, { data: cards }] = await Promise.all([
+    supabase.from("accounts").select("id, currency").eq("space_id", spaceId),
+    supabase.from("cards").select("id, payment_account_id").eq("space_id", spaceId),
+  ]);
+
+  const nonBrlAccountIds = new Set((accounts ?? []).filter((a) => a.currency !== "BRL").map((a) => a.id));
+  const cardIds = new Set(
+    (cards ?? []).filter((c) => c.payment_account_id && nonBrlAccountIds.has(c.payment_account_id)).map((c) => c.id),
+  );
+  return { accountIds: nonBrlAccountIds, cardIds };
+}
+
 // Filtra e agrupa por competence_date, não movement_date: uma compra no
 // cartão conta como despesa/saída de caixa no mês em que a fatura vence
 // (é quando o dinheiro efetivamente sai da conta), não no mês da compra.
@@ -43,18 +62,24 @@ interface RawTx {
 // igual a movement_date, então o comportamento não muda.
 async function fetchTransactions(spaceId: string, from: string, to: string): Promise<RawTx[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("transactions")
-    .select(
-      "id, amount_cents, direction, nature, classification_status, movement_date, competence_date, category_id, category:categories!transactions_category_id_fkey(name, color), subcategory_id, subcategory:categories!transactions_subcategory_id_fkey(name, color), tags, redemption_details(*)",
-    )
-    .eq("space_id", spaceId)
-    .is("deleted_at", null)
-    .gte("competence_date", from)
-    .lte("competence_date", to);
+  const [{ data, error }, { accountIds: nonBrlAccountIds, cardIds: nonBrlCardIds }] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select(
+        "id, amount_cents, direction, nature, classification_status, movement_date, competence_date, category_id, category:categories!transactions_category_id_fkey(name, color), subcategory_id, subcategory:categories!transactions_subcategory_id_fkey(name, color), tags, account_id, card_id, redemption_details(*)",
+      )
+      .eq("space_id", spaceId)
+      .is("deleted_at", null)
+      .gte("competence_date", from)
+      .lte("competence_date", to),
+    getNonBrlAccountAndCardIds(spaceId),
+  ]);
 
   if (error) throw error;
-  const rows = (data as unknown as RawTx[]) ?? [];
+  const allRows = (data as unknown as (RawTx & { account_id: string | null; card_id: string | null })[]) ?? [];
+  const rows = allRows.filter(
+    (row) => !(row.account_id && nonBrlAccountIds.has(row.account_id)) && !(row.card_id && nonBrlCardIds.has(row.card_id)),
+  );
   return applyReimbursementAbatement(spaceId, rows);
 }
 

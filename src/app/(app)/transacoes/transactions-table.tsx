@@ -7,12 +7,13 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Trash2, Pencil, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import type { TransactionWithRelations, TransactionSortBy } from "@/lib/data/transactions";
+import { transactionCurrency } from "@/lib/domain/transaction-currency";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
 import type { TagRow } from "@/lib/data/tags";
 import { natureLabels, natureTones } from "@/lib/domain/labels";
-import { formatCentsToBRL } from "@/lib/money/money";
+import { formatCents } from "@/lib/money/money";
 import { Table, Thead, Tbody, Tr, Th, Td } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -194,7 +195,7 @@ export function TransactionsTable({
                 </Td>
                 <Td className={`text-right tabular font-medium ${tx.direction === "entrada" ? "text-positive" : "text-text-primary"}`}>
                   {tx.direction === "saida" ? "−" : "+"}
-                  {formatCentsToBRL(tx.amount_cents)}
+                  {formatCents(tx.amount_cents, transactionCurrency(tx))}
                 </Td>
                 <Td>
                   <div className="flex justify-end gap-0.5">

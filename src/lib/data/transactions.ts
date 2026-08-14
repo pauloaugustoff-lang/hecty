@@ -11,8 +11,8 @@ export interface LinkedExpenseSummary {
 }
 
 export interface TransactionWithRelations extends TransactionRow {
-  account: { id: string; name: string; color: string } | null;
-  card: { id: string; name: string } | null;
+  account: { id: string; name: string; color: string; currency: string } | null;
+  card: { id: string; name: string; payment_account: { currency: string } | null } | null;
   category: { id: string; name: string; color: string } | null;
   subcategory: { id: string; name: string } | null;
   redemption: RedemptionRow | null;
@@ -45,8 +45,8 @@ export interface TransactionFilters {
 
 const SELECT_WITH_RELATIONS = `
   *,
-  account:accounts(id, name, color),
-  card:cards!transactions_card_id_fkey(id, name),
+  account:accounts(id, name, color, currency),
+  card:cards!transactions_card_id_fkey(id, name, payment_account:accounts!cards_payment_account_id_fkey(currency)),
   category:categories!transactions_category_id_fkey(id, name, color),
   subcategory:categories!transactions_subcategory_id_fkey(id, name),
   redemption:redemption_details(*),

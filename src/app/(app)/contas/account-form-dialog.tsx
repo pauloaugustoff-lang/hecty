@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { createAccountAction, updateAccountAction, type ActionState } from "./actions";
 import type { AccountRow } from "@/lib/data/accounts";
 import { accountTypeLabels } from "@/lib/domain/labels";
-import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
+import { parseBRLToCents, formatCents, CURRENCIES, CURRENCY_LABELS, type CurrencyCode } from "@/lib/money/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,8 +36,9 @@ export function AccountFormDialog({ spaceId, account }: { spaceId: string; accou
   const [state, formAction, isPending] = useActionState(boundAction, initialState);
   const [type, setType] = useState(account?.type ?? "corrente");
   const [color, setColor] = useState(account?.color ?? ACCOUNT_COLORS[0]);
+  const [currency, setCurrency] = useState<CurrencyCode>((account?.currency as CurrencyCode) ?? "BRL");
   const [balanceInput, setBalanceInput] = useState(
-    account ? formatCentsToBRL(account.initial_balance_cents).replace("R$", "").trim() : "",
+    account ? formatCents(account.initial_balance_cents, account.currency).replace(/[^\d,.-]/g, "").trim() : "",
   );
 
   useEffect(() => {
@@ -108,6 +109,26 @@ export function AccountFormDialog({ spaceId, account }: { spaceId: string; accou
               </Select>
               <input type="hidden" name="type" value={type} />
             </div>
+            {isEdit ? (
+              <input type="hidden" name="currency" value={account!.currency} />
+            ) : (
+              <div>
+                <Label htmlFor="currency">Moeda</Label>
+                <Select value={currency} onValueChange={(v) => setCurrency(v as CurrencyCode)} name="currency">
+                  <SelectTrigger id="currency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CURRENCIES.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {CURRENCY_LABELS[c]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <input type="hidden" name="currency" value={currency} />
+              </div>
+            )}
             <div>
               <Label htmlFor="initialBalanceDate">Data do saldo inicial</Label>
               <Input
@@ -119,7 +140,7 @@ export function AccountFormDialog({ spaceId, account }: { spaceId: string; accou
               />
             </div>
             <div className="col-span-2">
-              <Label htmlFor="initialBalance">Saldo inicial</Label>
+              <Label htmlFor="initialBalance">Saldo inicial ({isEdit ? account!.currency : currency})</Label>
               <Input
                 id="initialBalance"
                 inputMode="decimal"

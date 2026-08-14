@@ -16,7 +16,7 @@ function parseAccountFormData(formData: FormData) {
     type: formData.get("type"),
     initialBalanceCents: Number(formData.get("initialBalanceCents") ?? 0),
     initialBalanceDate: formData.get("initialBalanceDate"),
-    currency: "BRL",
+    currency: formData.get("currency") || "BRL",
     color: formData.get("color") ?? "#3b82f6",
   });
 }

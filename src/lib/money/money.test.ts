@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCentsToBRL, parseBRLToCents, signedCents, sumCents } from "./money";
+import { formatCents, formatCentsToBRL, parseBRLToCents, signedCents, sumCents } from "./money";
 
 const NBSP = " ";
 
@@ -12,6 +12,17 @@ describe("formatCentsToBRL", () => {
 
   it("aceita exibir o sinal explicitamente", () => {
     expect(formatCentsToBRL(500, { signed: true })).toBe(`+R$${NBSP}5,00`);
+  });
+});
+
+describe("formatCents", () => {
+  it("formata em BRL por padrão", () => {
+    expect(formatCents(10500)).toBe(formatCentsToBRL(10500));
+  });
+
+  it("formata em outras moedas quando informado", () => {
+    expect(formatCents(10500, "USD")).toContain("105,00");
+    expect(formatCents(10500, "USD")).not.toBe(formatCentsToBRL(10500));
   });
 });
 
