@@ -36,21 +36,24 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, SelectGroup, SelectSeparator } from "@/components/ui/select";
 import { cn } from "@/lib/utils/cn";
+import { sortByName } from "@/lib/utils/sort";
 
-const GENERIC_NATURES: TransactionNature[] = [
-  "receita_trabalho",
-  "rendimento_investimento",
-  "outras_receitas",
-  "despesa",
-  "aplicacao_financeira",
-  "resgate_investimento",
-  "resgate_a_decompor",
-  "estorno",
-  "reembolso",
-  "emprestimo",
-  "ajuste",
-  "nao_classificado",
-];
+const GENERIC_NATURES: TransactionNature[] = (
+  [
+    "receita_trabalho",
+    "rendimento_investimento",
+    "outras_receitas",
+    "despesa",
+    "aplicacao_financeira",
+    "resgate_investimento",
+    "resgate_a_decompor",
+    "estorno",
+    "reembolso",
+    "emprestimo",
+    "ajuste",
+    "nao_classificado",
+  ] as TransactionNature[]
+).sort((a, b) => natureLabels[a].localeCompare(natureLabels[b], "pt-BR", { sensitivity: "base" }));
 
 const CATEGORY_KIND_LABELS: Record<CategoryKind, string> = {
   despesa: "Despesa",
@@ -138,11 +141,11 @@ export function TransactionFormDialog({
   // Só mostra categorias compatíveis com a natureza/direção atual, pra não dar
   // pra classificar ex. uma "Outras receitas" com uma categoria de despesa.
   const parentCategories = useMemo(
-    () => localCategories.filter((c) => !c.parent_id && c.kind === categoryKind),
+    () => sortByName(localCategories.filter((c) => !c.parent_id && c.kind === categoryKind)),
     [localCategories, categoryKind],
   );
   const subcategories = useMemo(
-    () => localCategories.filter((c) => c.parent_id === categoryId),
+    () => sortByName(localCategories.filter((c) => c.parent_id === categoryId)),
     [localCategories, categoryId],
   );
   const selectedParentCategory = useMemo(() => localCategories.find((c) => c.id === categoryId), [localCategories, categoryId]);

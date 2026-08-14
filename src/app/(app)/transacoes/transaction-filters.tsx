@@ -9,6 +9,7 @@ import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
 import { natureLabels } from "@/lib/domain/labels";
 import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
+import { sortByName, sortEntriesByLabel } from "@/lib/utils/sort";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -37,8 +38,11 @@ export function TransactionFilters({
   const [maxAmountInput, setMaxAmountInput] = useState(() => centsParamToInput(searchParams.get("maxAmount")));
 
   const categoryId = searchParams.get("categoryId") ?? "";
-  const parentCategories = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
-  const subcategories = useMemo(() => categories.filter((c) => c.parent_id === categoryId), [categories, categoryId]);
+  const parentCategories = useMemo(() => sortByName(categories.filter((c) => !c.parent_id)), [categories]);
+  const subcategories = useMemo(
+    () => sortByName(categories.filter((c) => c.parent_id === categoryId)),
+    [categories, categoryId],
+  );
 
   const fromParam = searchParams.get("from");
   // Serve só de âncora pras setas/seletor de mês — não precisa refletir um
@@ -197,7 +201,7 @@ export function TransactionFilters({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">Todas as naturezas</SelectItem>
-          {Object.entries(natureLabels).map(([value, label]) => (
+          {sortEntriesByLabel(Object.entries(natureLabels)).map(([value, label]) => (
             <SelectItem key={value} value={value}>
               {label}
             </SelectItem>

@@ -8,6 +8,7 @@ import type { TransactionWithRelations } from "@/lib/data/transactions";
 import type { CategoryRow } from "@/lib/data/categories";
 import type { TransactionNature } from "@/lib/supabase/types";
 import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
+import { sortByName, sortEntriesByLabel } from "@/lib/utils/sort";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,10 +54,13 @@ export function BulkClassifyDialog({
   }, [selectedTransactions]);
   const categoryKind = categoryKindForNature(nature, directionHint);
   const parentCategories = useMemo(
-    () => categories.filter((c) => !c.parent_id && (!categoryKind || c.kind === categoryKind)),
+    () => sortByName(categories.filter((c) => !c.parent_id && (!categoryKind || c.kind === categoryKind))),
     [categories, categoryKind],
   );
-  const subcategories = useMemo(() => categories.filter((c) => c.parent_id === categoryId), [categories, categoryId]);
+  const subcategories = useMemo(
+    () => sortByName(categories.filter((c) => c.parent_id === categoryId)),
+    [categories, categoryId],
+  );
 
   function changeNature(next: TransactionNature) {
     const nextKind = categoryKindForNature(next, directionHint);
@@ -121,13 +125,15 @@ export function BulkClassifyDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(natureLabels)
-                  .filter(([value]) => value !== "transferencia_entre_contas" && value !== "pagamento_cartao")
-                  .map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
+                {sortEntriesByLabel(
+                  Object.entries(natureLabels).filter(
+                    ([value]) => value !== "transferencia_entre_contas" && value !== "pagamento_cartao",
+                  ),
+                ).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

@@ -11,6 +11,7 @@ import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
 import type { TransactionNature, RuleMatchType, TransactionDirection, CategoryKind } from "@/lib/supabase/types";
 import { natureLabels } from "@/lib/domain/labels";
+import { sortByName, sortEntriesByLabel } from "@/lib/utils/sort";
 import { parseBRLToCents, formatCentsToBRL } from "@/lib/money/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,8 +97,11 @@ export function RuleFormDialog({
   const [newSubcategoryColor, setNewSubcategoryColor] = useState(CATEGORY_COLORS[0]);
   const [isCreatingCategory, startCreateCategoryTransition] = useTransition();
 
-  const parentCategories = useMemo(() => localCategories.filter((c) => !c.parent_id), [localCategories]);
-  const subcategories = useMemo(() => localCategories.filter((c) => c.parent_id === categoryId), [localCategories, categoryId]);
+  const parentCategories = useMemo(() => sortByName(localCategories.filter((c) => !c.parent_id)), [localCategories]);
+  const subcategories = useMemo(
+    () => sortByName(localCategories.filter((c) => c.parent_id === categoryId)),
+    [localCategories, categoryId],
+  );
   const selectedParentCategory = useMemo(() => localCategories.find((c) => c.id === categoryId), [localCategories, categoryId]);
 
   useEffect(() => {
@@ -338,7 +342,7 @@ export function RuleFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Não alterar natureza</SelectItem>
-                  {Object.entries(natureLabels).map(([value, label]) => (
+                  {sortEntriesByLabel(Object.entries(natureLabels)).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
                     </SelectItem>

@@ -7,6 +7,7 @@ import { bulkUpdateCategoryAction } from "./actions";
 import type { CategoryRow } from "@/lib/data/categories";
 import type { TransactionNature } from "@/lib/supabase/types";
 import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
+import { sortByName, sortEntriesByLabel } from "@/lib/utils/sort";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -42,10 +43,13 @@ export function BulkCategoryDialog({
   // por si só (empréstimo, ajuste, não classificado) ficam sem filtro.
   const categoryKind = nature ? categoryKindForNature(nature) : null;
   const parentCategories = useMemo(
-    () => categories.filter((c) => !c.parent_id && (!categoryKind || c.kind === categoryKind)),
+    () => sortByName(categories.filter((c) => !c.parent_id && (!categoryKind || c.kind === categoryKind))),
     [categories, categoryKind],
   );
-  const subcategories = useMemo(() => categories.filter((c) => c.parent_id === categoryId), [categories, categoryId]);
+  const subcategories = useMemo(
+    () => sortByName(categories.filter((c) => c.parent_id === categoryId)),
+    [categories, categoryId],
+  );
 
   function changeNature(next: TransactionNature | "") {
     const nextKind = next ? categoryKindForNature(next) : null;
@@ -106,13 +110,15 @@ export function BulkCategoryDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Não alterar natureza</SelectItem>
-                {Object.entries(natureLabels)
-                  .filter(([value]) => value !== "transferencia_entre_contas" && value !== "pagamento_cartao")
-                  .map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
+                {sortEntriesByLabel(
+                  Object.entries(natureLabels).filter(
+                    ([value]) => value !== "transferencia_entre_contas" && value !== "pagamento_cartao",
+                  ),
+                ).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
