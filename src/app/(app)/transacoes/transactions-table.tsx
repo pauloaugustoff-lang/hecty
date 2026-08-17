@@ -107,6 +107,7 @@ export function TransactionsTable({
             <BulkCategoryDialog
               spaceId={spaceId}
               categories={categories}
+              tags={tags}
               transactionIds={Array.from(selected)}
               onDone={() => setSelected(new Set())}
             />

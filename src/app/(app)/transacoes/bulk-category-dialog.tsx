@@ -2,13 +2,15 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Tag } from "lucide-react";
-import { bulkUpdateCategoryAction } from "./actions";
+import { Tag, Plus, X, Search } from "lucide-react";
+import { bulkUpdateCategoryAction, createTagAction } from "./actions";
 import type { CategoryRow } from "@/lib/data/categories";
+import type { TagRow } from "@/lib/data/tags";
 import type { TransactionNature } from "@/lib/supabase/types";
 import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
 import { sortByName, sortEntriesByLabel } from "@/lib/utils/sort";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -22,22 +24,39 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
+// Sentinelas do select de categoria: "keep" = não alterar (padrão — antes o
+// diálogo SEMPRE gravava a categoria, e aplicar sem escolher uma apagava a
+// categoria de todos os selecionados), "none" = remover explicitamente.
+const KEEP_CATEGORY = "keep";
+const CLEAR_CATEGORY = "none";
+
+const TAG_COLORS = ["#f97316", "#0ea5e9", "#8b5cf6", "#22c55e", "#14b8a6", "#ec4899", "#6366f1", "#94a3b8"];
+
 export function BulkCategoryDialog({
   spaceId,
   categories,
+  tags,
   transactionIds,
   onDone,
 }: {
   spaceId: string;
   categories: CategoryRow[];
+  tags: TagRow[];
   transactionIds: string[];
   onDone: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [nature, setNature] = useState<TransactionNature | "">("");
-  const [categoryId, setCategoryId] = useState("");
+  const [categoryChoice, setCategoryChoice] = useState(KEEP_CATEGORY);
   const [subcategoryId, setSubcategoryId] = useState("");
+
+  const [localTags, setLocalTags] = useState<TagRow[]>(tags);
+  const [selectedTagNames, setSelectedTagNames] = useState<string[]>([]);
+  const [tagSearch, setTagSearch] = useState("");
+  const [isCreatingTag, startCreateTagTransition] = useTransition();
+
+  const hasRealCategory = categoryChoice !== KEEP_CATEGORY && categoryChoice !== CLEAR_CATEGORY;
 
   // Sem dado de direção aqui (só os ids foram passados) — naturezas ambíguas
   // por si só (empréstimo, ajuste, não classificado) ficam sem filtro.
@@ -47,29 +66,59 @@ export function BulkCategoryDialog({
     [categories, categoryKind],
   );
   const subcategories = useMemo(
-    () => sortByName(categories.filter((c) => c.parent_id === categoryId)),
-    [categories, categoryId],
+    () => sortByName(categories.filter((c) => c.parent_id === categoryChoice)),
+    [categories, categoryChoice],
   );
+
+  const tagResults = useMemo(() => {
+    const query = tagSearch.trim().toLowerCase();
+    if (!query) return [];
+    return sortByName(localTags.filter((t) => !selectedTagNames.includes(t.name) && t.name.toLowerCase().includes(query)));
+  }, [localTags, tagSearch, selectedTagNames]);
+  const hasExactTagMatch = localTags.some((t) => t.name.toLowerCase() === tagSearch.trim().toLowerCase());
+
+  const hasChanges = Boolean(nature) || categoryChoice !== KEEP_CATEGORY || selectedTagNames.length > 0;
 
   function changeNature(next: TransactionNature | "") {
     const nextKind = next ? categoryKindForNature(next) : null;
-    if (nextKind && categoryId) {
-      const current = categories.find((c) => c.id === categoryId);
+    if (nextKind && hasRealCategory) {
+      const current = categories.find((c) => c.id === categoryChoice);
       if (current && current.kind !== nextKind) {
-        setCategoryId("");
+        setCategoryChoice(KEEP_CATEGORY);
         setSubcategoryId("");
       }
     }
     setNature(next);
   }
 
+  function handleCreateTag() {
+    const name = tagSearch.trim();
+    if (!name || hasExactTagMatch) return;
+    const fd = new FormData();
+    fd.set("name", name);
+    fd.set("color", TAG_COLORS[localTags.length % TAG_COLORS.length]);
+    startCreateTagTransition(async () => {
+      const result = await createTagAction(spaceId, {}, fd);
+      if (result.error || !result.tag) {
+        toast.error(result.error ?? "Não foi possível criar a tag.");
+        return;
+      }
+      setLocalTags((prev) => [...prev, result.tag!]);
+      setSelectedTagNames((prev) => [...prev, result.tag!.name]);
+      setTagSearch("");
+      toast.success("Tag criada");
+    });
+  }
+
   function handleSubmit() {
     startTransition(async () => {
       const result = await bulkUpdateCategoryAction(spaceId, {
         transactionIds,
-        categoryId: categoryId || null,
-        subcategoryId: subcategoryId || null,
+        ...(categoryChoice === KEEP_CATEGORY
+          ? {}
+          : { categoryId: categoryChoice === CLEAR_CATEGORY ? null : categoryChoice, subcategoryId: subcategoryId || null }),
         nature: nature || null,
+        addTags: selectedTagNames,
       });
 
       if (result.error) {
@@ -80,8 +129,10 @@ export function BulkCategoryDialog({
       toast.success(`Classificação alterada em ${transactionIds.length} lançamento(s)`);
       setOpen(false);
       setNature("");
-      setCategoryId("");
+      setCategoryChoice(KEEP_CATEGORY);
       setSubcategoryId("");
+      setSelectedTagNames([]);
+      setTagSearch("");
       onDone();
     });
   }
@@ -97,7 +148,8 @@ export function BulkCategoryDialog({
         <DialogHeader>
           <DialogTitle>Alterar classificação em massa</DialogTitle>
           <DialogDescription>
-            Aplica a mesma natureza/categoria/subcategoria aos {transactionIds.length} lançamentos selecionados.
+            Aplica natureza, categoria e tags aos {transactionIds.length} lançamentos selecionados. Campos em
+            &quot;Não alterar&quot; ficam como estão.
           </DialogDescription>
         </DialogHeader>
 
@@ -126,16 +178,18 @@ export function BulkCategoryDialog({
             <div>
               <Label htmlFor="bulk-category">Categoria</Label>
               <Select
-                value={categoryId}
+                value={categoryChoice}
                 onValueChange={(v) => {
-                  setCategoryId(v);
+                  setCategoryChoice(v);
                   setSubcategoryId("");
                 }}
               >
                 <SelectTrigger id="bulk-category">
-                  <SelectValue placeholder="Sem categoria" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={KEEP_CATEGORY}>Não alterar categoria</SelectItem>
+                  <SelectItem value={CLEAR_CATEGORY}>Remover categoria</SelectItem>
                   {parentCategories.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
@@ -146,7 +200,7 @@ export function BulkCategoryDialog({
             </div>
             <div>
               <Label htmlFor="bulk-subcategory">Subcategoria</Label>
-              <Select value={subcategoryId} onValueChange={setSubcategoryId} disabled={!categoryId}>
+              <Select value={subcategoryId} onValueChange={setSubcategoryId} disabled={!hasRealCategory}>
                 <SelectTrigger id="bulk-subcategory">
                   <SelectValue placeholder="Sem subcategoria" />
                 </SelectTrigger>
@@ -160,6 +214,73 @@ export function BulkCategoryDialog({
               </Select>
             </div>
           </div>
+
+          <div>
+            <Label>Adicionar tags</Label>
+            <p className="mb-1.5 -mt-0.5 text-[11px] text-text-tertiary">
+              As tags escolhidas são acrescentadas aos lançamentos selecionados, sem remover as que eles já têm.
+            </p>
+
+            {selectedTagNames.length > 0 ? (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {selectedTagNames.map((name) => {
+                  const color = localTags.find((t) => t.name === name)?.color ?? "#94a3b8";
+                  return (
+                    <span
+                      key={name}
+                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px]"
+                      style={{ backgroundColor: `${color}26`, color }}
+                    >
+                      {name}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTagNames((prev) => prev.filter((n) => n !== name))}
+                        aria-label={`Remover tag ${name}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
+              <Input value={tagSearch} onChange={(e) => setTagSearch(e.target.value)} placeholder="Buscar ou criar uma tag…" className="pl-8" />
+            </div>
+            {tagSearch.trim() ? (
+              <div className="relative">
+                <div className="absolute z-10 mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface-overlay shadow-[var(--shadow-md)]">
+                  {tagResults.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedTagNames((prev) => [...prev, t.name]);
+                        setTagSearch("");
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-surface-sunken"
+                    >
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+                      {t.name}
+                    </button>
+                  ))}
+                  {!hasExactTagMatch ? (
+                    <button
+                      type="button"
+                      onClick={handleCreateTag}
+                      disabled={isCreatingTag}
+                      className="flex w-full items-center gap-1 border-t border-border-subtle px-3 py-2 text-left text-[13px] text-accent hover:bg-surface-sunken"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {isCreatingTag ? "Criando…" : `Criar tag "${tagSearch.trim()}"`}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <DialogFooter>
@@ -168,7 +289,7 @@ export function BulkCategoryDialog({
               Cancelar
             </Button>
           </DialogClose>
-          <Button variant="primary" onClick={handleSubmit} disabled={isPending}>
+          <Button variant="primary" onClick={handleSubmit} disabled={isPending || !hasChanges}>
             {isPending ? "Salvando…" : "Aplicar"}
           </Button>
         </DialogFooter>

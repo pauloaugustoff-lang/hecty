@@ -360,31 +360,98 @@ export async function deleteTransactionsAction(transactionIds: string[]): Promis
 
 export interface BulkUpdateCategoryInput {
   transactionIds: string[];
-  categoryId: string | null;
-  subcategoryId: string | null;
+  /** undefined = não alterar; null = remover categoria; id = definir. */
+  categoryId?: string | null;
+  subcategoryId?: string | null;
   /** null = não alterar a natureza dos lançamentos selecionados. */
   nature: TransactionNature | null;
+  /** Tags a ACRESCENTAR às existentes de cada lançamento (nunca substitui). */
+  addTags?: string[];
 }
 
 export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdateCategoryInput): Promise<ActionState> {
   if (input.transactionIds.length === 0) return { error: "Nenhum lançamento selecionado." };
 
-  const supabase = await createClient();
-  const update: {
-    category_id: string | null;
-    subcategory_id: string | null;
-    nature?: TransactionNature;
-    classification_status?: "classificado" | "nao_classificado";
-  } = { category_id: input.categoryId, subcategory_id: input.subcategoryId };
-  if (input.nature) {
-    update.nature = input.nature;
-    update.classification_status = classificationStatusFor(input.nature, Boolean(input.categoryId));
+  const touchesCategory = input.categoryId !== undefined;
+  const addTags = input.addTags ?? [];
+  if (!touchesCategory && !input.nature && addTags.length === 0) {
+    return { error: "Nenhuma alteração selecionada." };
   }
 
-  const { error } = await supabase.from("transactions").update(update).eq("space_id", spaceId).in("id", input.transactionIds);
+  const supabase = await createClient();
 
-  if (error) {
-    return { error: "Não foi possível alterar os lançamentos selecionados." };
+  // Tags acrescentam às existentes (payload difere por linha) e, quando a
+  // natureza muda sem mexer na categoria, o status depende da categoria que
+  // cada linha JÁ tem — nos dois casos é preciso ler as linhas antes.
+  const needsRowData = addTags.length > 0 || (Boolean(input.nature) && !touchesCategory);
+
+  if (!needsRowData) {
+    const update: {
+      category_id?: string | null;
+      subcategory_id?: string | null;
+      nature?: TransactionNature;
+      classification_status?: "classificado" | "nao_classificado";
+    } = {};
+    if (touchesCategory) {
+      update.category_id = input.categoryId ?? null;
+      update.subcategory_id = input.subcategoryId ?? null;
+    }
+    if (input.nature) {
+      update.nature = input.nature;
+      update.classification_status = classificationStatusFor(input.nature, Boolean(input.categoryId));
+    }
+
+    const { error } = await supabase.from("transactions").update(update).eq("space_id", spaceId).in("id", input.transactionIds);
+    if (error) {
+      return { error: "Não foi possível alterar os lançamentos selecionados." };
+    }
+  } else {
+    const { data: rows, error: fetchError } = await supabase
+      .from("transactions")
+      .select("id, tags, category_id")
+      .eq("space_id", spaceId)
+      .in("id", input.transactionIds);
+    if (fetchError || !rows) {
+      return { error: "Não foi possível carregar os lançamentos selecionados." };
+    }
+
+    // Linhas com o mesmo payload final (mesmas tags resultantes etc.) vão num
+    // único UPDATE — no caso comum (todas sem tag) isso é UMA chamada.
+    interface BulkRowPayload {
+      category_id?: string | null;
+      subcategory_id?: string | null;
+      nature?: TransactionNature;
+      classification_status?: "classificado" | "nao_classificado";
+      tags?: string[];
+    }
+    const groups = new Map<string, { payload: BulkRowPayload; ids: string[] }>();
+    for (const row of rows) {
+      const payload: BulkRowPayload = {};
+      if (touchesCategory) {
+        payload.category_id = input.categoryId ?? null;
+        payload.subcategory_id = input.subcategoryId ?? null;
+      }
+      if (input.nature) {
+        const finalCategoryId = touchesCategory ? input.categoryId : row.category_id;
+        payload.nature = input.nature;
+        payload.classification_status = classificationStatusFor(input.nature, Boolean(finalCategoryId));
+      }
+      if (addTags.length > 0) {
+        payload.tags = Array.from(new Set([...(row.tags ?? []), ...addTags]));
+      }
+
+      const key = JSON.stringify(payload);
+      const group = groups.get(key) ?? { payload, ids: [] };
+      group.ids.push(row.id);
+      groups.set(key, group);
+    }
+
+    for (const group of groups.values()) {
+      const { error } = await supabase.from("transactions").update(group.payload).eq("space_id", spaceId).in("id", group.ids);
+      if (error) {
+        return { error: "Não foi possível alterar os lançamentos selecionados." };
+      }
+    }
   }
 
   revalidateTransactionData();
