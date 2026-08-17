@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { transactionFormSchema, redemptionBreakdownSchema, tagFormSchema } from "@/lib/validation/schemas";
 import type { TagRow } from "@/lib/data/tags";
@@ -107,6 +108,7 @@ export async function createTagAction(spaceId: string, _prev: TagActionState, fo
   }
 
   revalidateTransactionData();
+  revalidatePath("/configuracoes/tags");
   return { success: true, tag };
 }
 

@@ -3,7 +3,7 @@ import { requireCurrentSpace } from "@/lib/spaces/current-space";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/layout/page-header";
 import { Callout } from "@/components/ui/callout";
-import { ChevronRight, Tag, Users } from "lucide-react";
+import { ChevronRight, Tag, Tags, Users } from "lucide-react";
 import { RenameSpaceForm } from "./rename-space-form";
 import { PublicSignupToggle } from "./public-signup-toggle";
 import { DemoDataButton } from "./demo-data-button";
@@ -34,6 +34,12 @@ export default async function ConfiguracoesPage() {
           <Link href="/configuracoes/categorias" className="flex items-center justify-between px-4 py-3 text-sm hover:bg-surface-sunken">
             <span className="flex items-center gap-2">
               <Tag className="h-4 w-4 text-text-tertiary" /> Categorias
+            </span>
+            <ChevronRight className="h-4 w-4 text-text-tertiary" />
+          </Link>
+          <Link href="/configuracoes/tags" className="flex items-center justify-between px-4 py-3 text-sm hover:bg-surface-sunken">
+            <span className="flex items-center gap-2">
+              <Tags className="h-4 w-4 text-text-tertiary" /> Tags
             </span>
             <ChevronRight className="h-4 w-4 text-text-tertiary" />
           </Link>
