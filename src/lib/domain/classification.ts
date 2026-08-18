@@ -12,6 +12,7 @@ const CATEGORY_OPTIONAL_NATURES: ReadonlySet<TransactionNature> = new Set([
   "pagamento_cartao",
   "reembolso",
   "estorno",
+  "repasse",
   "ajuste",
   "emprestimo",
 ]);

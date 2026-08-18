@@ -7,6 +7,7 @@ import {
   createTransactionAction,
   updateTransactionAction,
   searchExpenseTransactionsAction,
+  searchRevenueTransactionsAction,
   createTagAction,
   type ActionState,
   type ExpenseSearchResult,
@@ -52,6 +53,7 @@ const GENERIC_NATURES: TransactionNature[] = (
     "resgate_a_decompor",
     "estorno",
     "reembolso",
+    "repasse",
     "emprestimo",
     "ajuste",
     "nao_classificado",
@@ -144,6 +146,10 @@ export function TransactionFormDialog({
 
   const isRedemption = nature === "resgate_investimento" || nature === "resgate_a_decompor";
   const isReimbursing = nature === "reembolso" || nature === "estorno";
+  const isRepasse = nature === "repasse";
+  // Reembolso/estorno vinculam DESPESAS (entrada abatendo saídas); repasse
+  // vincula RECEITAS (saída abatendo entradas — dinheiro que não era seu).
+  const showsLinkPicker = isReimbursing || isRepasse;
   const linkedExpensesTotal = linkedExpenses.reduce((sum, e) => sum + e.amount_cents, 0);
   // Helper compartilhado (mesmo dos diálogos em massa) — a cópia local que
   // existia aqui divergia dele e oferecia categorias diferentes pro mesmo
@@ -206,18 +212,18 @@ export function TransactionFormDialog({
   }, [selectedCard, movementDate, competenceDateTouched]);
 
   useEffect(() => {
-    if (!isReimbursing || !expenseSearch.trim()) {
+    if (!showsLinkPicker || !expenseSearch.trim()) {
       setExpenseResults([]);
       return;
     }
     setIsSearchingExpense(true);
     const timeout = setTimeout(() => {
-      searchExpenseTransactionsAction(spaceId, expenseSearch)
+      (isRepasse ? searchRevenueTransactionsAction : searchExpenseTransactionsAction)(spaceId, expenseSearch)
         .then(setExpenseResults)
         .finally(() => setIsSearchingExpense(false));
     }, 300);
     return () => clearTimeout(timeout);
-  }, [isReimbursing, expenseSearch, spaceId]);
+  }, [showsLinkPicker, isRepasse, expenseSearch, spaceId]);
 
   useEffect(() => {
     if (state.success) {
@@ -435,9 +441,15 @@ export function TransactionFormDialog({
               </Select>
             </div>
 
-            {isReimbursing ? (
+            {showsLinkPicker ? (
               <div className="col-span-2">
-                <Label>{nature === "estorno" ? "Qual(is) despesa(s) isso estorna?" : "Qual(is) despesa(s) isso reembolsa?"}</Label>
+                <Label>
+                  {isRepasse
+                    ? "Qual(is) receita(s) esse repasse abate?"
+                    : nature === "estorno"
+                      ? "Qual(is) despesa(s) isso estorna?"
+                      : "Qual(is) despesa(s) isso reembolsa?"}
+                </Label>
 
                 {linkedExpenses.length > 0 ? (
                   <div className="mb-2 space-y-1.5">
@@ -470,7 +482,7 @@ export function TransactionFormDialog({
                   <Input
                     value={expenseSearch}
                     onChange={(e) => setExpenseSearch(e.target.value)}
-                    placeholder="Buscar mais uma despesa pela descrição…"
+                    placeholder={isRepasse ? "Buscar a receita pela descrição…" : "Buscar mais uma despesa pela descrição…"}
                     className="pl-8"
                   />
                 </div>
@@ -480,7 +492,7 @@ export function TransactionFormDialog({
                       {isSearchingExpense ? (
                         <p className="px-3 py-2 text-[13px] text-text-tertiary">Buscando…</p>
                       ) : expenseResults.filter((r) => !linkedExpenses.some((e) => e.id === r.id)).length === 0 ? (
-                        <p className="px-3 py-2 text-[13px] text-text-tertiary">Nenhuma despesa encontrada.</p>
+                        <p className="px-3 py-2 text-[13px] text-text-tertiary">{isRepasse ? "Nenhuma receita encontrada." : "Nenhuma despesa encontrada."}</p>
                       ) : (
                         expenseResults
                           .filter((r) => !linkedExpenses.some((e) => e.id === r.id))
@@ -515,14 +527,13 @@ export function TransactionFormDialog({
                 ) : null}
 
                 <p className="mt-1.5 text-[11px] text-text-tertiary">
-                  O valor deste lançamento é distribuído entre as despesas selecionadas (proporcional ao valor de
-                  cada uma) e abatido daquela categoria — não fica só contando como receita à parte. Cobre tanto
-                  reembolso parcial (ex.: estorno de metade de uma mensalidade) quanto um pagamento cobrindo várias
-                  despesas de uma vez.
+                  {isRepasse
+                    ? "O valor do repasse é abatido da(s) receita(s) vinculada(s) — nos painéis, só a parte que é sua continua contando como receita. Ex.: alvará de R$ 1.000 com R$ 500 do sócio: vincule o repasse de R$ 500 e a receita passa a valer R$ 500."
+                    : "O valor deste lançamento é distribuído entre as despesas selecionadas (proporcional ao valor de cada uma) e abatido daquela categoria — não fica só contando como receita à parte. Cobre tanto reembolso parcial (ex.: estorno de metade de uma mensalidade) quanto um pagamento cobrindo várias despesas de uma vez."}
                 </p>
                 {linkedExpenses.length > 0 && amountCents > 0 && linkedExpensesTotal !== amountCents ? (
                   <Callout tone="warning" className="mt-2">
-                    Despesas selecionadas somam {formatCentsToBRL(linkedExpensesTotal)}, mas este lançamento é de{" "}
+                    {isRepasse ? "Receitas vinculadas somam" : "Despesas selecionadas somam"} {formatCentsToBRL(linkedExpensesTotal)}, mas este lançamento é de{" "}
                     {formatCentsToBRL(amountCents)}. Confira se está certo.
                   </Callout>
                 ) : null}

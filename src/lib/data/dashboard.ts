@@ -7,11 +7,21 @@ import { REVENUE_NATURES } from "@/lib/domain/labels";
 import { listTags } from "@/lib/data/tags";
 import { format, startOfMonth, subMonths } from "date-fns";
 
-const REIMBURSING_NATURES = ["reembolso", "estorno"] as const;
-// Categoria sintética (não existe no banco) pro excedente de um reembolso/
-// estorno maior que a despesa vinculada — fica destacado no painel em vez de
+// Naturezas que abatem lançamentos vinculados: reembolso/estorno (entrada
+// abatendo despesas) e repasse (saída abatendo receitas — dinheiro que nunca
+// foi seu, ex.: a parte do sócio num alvará recebido).
+const ABATING_NATURES = ["reembolso", "estorno", "repasse"] as const;
+// Naturezas que podem ser abatidas por um vínculo.
+const ABATABLE_REVENUE_NATURES = ["receita_trabalho", "rendimento_investimento", "outras_receitas"] as const;
+// Categorias sintéticas (não existem no banco) pro excedente de um vínculo
+// maior que o lançamento abatido — ficam destacadas no painel em vez de
 // cair em "Sem categoria" junto com lançamentos realmente sem classificação.
 const LEFTOVER_REIMBURSEMENT_CATEGORY_ID = "__reembolso_a_maior__";
+const LEFTOVER_REPASSE_CATEGORY_ID = "__repasse_a_maior__";
+
+function isAbatableNature(nature: string): boolean {
+  return nature === "despesa" || (ABATABLE_REVENUE_NATURES as readonly string[]).includes(nature);
+}
 
 interface RawTx {
   id: string;
@@ -109,28 +119,27 @@ interface ReimbursementLink {
 const LINK_SELECT =
   "id, expense_transaction_id, allocated_amount_cents, reimbursement_transaction_id, expense:transactions!expense_transaction_id(amount_cents)";
 
-// Um reembolso/estorno vinculado a uma ou mais despesas (ex.: mãe reembolsa
-// metade do plano de saúde, ou uma única transferência cobre dois boletos)
-// abate o valor de cada despesa em vez de só contar como receita à parte —
-// senão a categoria mostraria o gasto bruto, não o custo real. Os vínculos
-// são buscados pelos DOIS lados: pelas despesas da janela (para abater) e
-// pelos reembolsos da janela (para não recontar como receita um reembolso
-// cuja despesa está em OUTRO período — antes disso o mesmo valor abatia a
-// despesa em junho E contava como receita cheia em julho). Ids em blocos
-// pra não estourar o limite de tamanho de URL do PostgREST.
+// Um lançamento "abatedor" vinculado (reembolso/estorno abatendo despesas,
+// repasse abatendo receitas) reduz o valor do lançamento abatido em vez de
+// contar à parte — senão a categoria mostraria o valor bruto, não o real.
+// Os vínculos são buscados pelos DOIS lados: pelos abatidos da janela (para
+// reduzir) e pelos abatedores da janela (para não recontar um abatedor cujo
+// alvo está em OUTRO período — antes disso o mesmo valor abatia a despesa em
+// junho E contava como receita cheia em julho). Ids em blocos pra não
+// estourar o limite de tamanho de URL do PostgREST.
 async function applyReimbursementAbatement(spaceId: string, rows: RawTx[]): Promise<RawTx[]> {
-  const despesaIds = rows.filter((r) => r.nature === "despesa").map((r) => r.id);
-  const reimbRowIds = rows
-    .filter((r) => (REIMBURSING_NATURES as readonly string[]).includes(r.nature))
+  const abatedIds = rows.filter((r) => isAbatableNature(r.nature)).map((r) => r.id);
+  const abatingRowIds = rows
+    .filter((r) => (ABATING_NATURES as readonly string[]).includes(r.nature))
     .map((r) => r.id);
-  if (despesaIds.length === 0 && reimbRowIds.length === 0) return rows;
+  if (abatedIds.length === 0 && abatingRowIds.length === 0) return rows;
 
   const supabase = await createClient();
   const results = await Promise.all([
-    ...chunk(despesaIds, 200).map((ids) =>
+    ...chunk(abatedIds, 200).map((ids) =>
       supabase.from("transaction_reimbursement_links").select(LINK_SELECT).eq("space_id", spaceId).in("expense_transaction_id", ids),
     ),
-    ...chunk(reimbRowIds, 200).map((ids) =>
+    ...chunk(abatingRowIds, 200).map((ids) =>
       supabase.from("transaction_reimbursement_links").select(LINK_SELECT).eq("space_id", spaceId).in("reimbursement_transaction_id", ids),
     ),
   ]);
@@ -144,62 +153,79 @@ async function applyReimbursementAbatement(spaceId: string, rows: RawTx[]): Prom
   }
   if (linkById.size === 0) return rows;
   // Ordem determinística: a absorção percorre os vínculos acumulando redução
-  // por despesa, então a ordem afeta qual reembolso fica com o excedente.
+  // por lançamento abatido, então a ordem afeta quem fica com o excedente.
   const links = Array.from(linkById.values()).sort((a, b) => a.id.localeCompare(b.id));
 
-  const despesaAmountById = new Map(rows.filter((r) => r.nature === "despesa").map((r) => [r.id, r.amount_cents]));
+  const abatedAmountById = new Map(rows.filter((r) => isAbatableNature(r.nature)).map((r) => [r.id, r.amount_cents]));
   for (const link of links) {
-    if (!despesaAmountById.has(link.expense_transaction_id)) {
-      despesaAmountById.set(link.expense_transaction_id, link.expense?.amount_cents ?? 0);
+    if (!abatedAmountById.has(link.expense_transaction_id)) {
+      abatedAmountById.set(link.expense_transaction_id, link.expense?.amount_cents ?? 0);
     }
   }
-  const reductionByDespesaId = new Map<string, number>();
-  // Quando o reembolso/estorno vinculado é maior que a despesa que ele cobre
+  const reductionByAbatedId = new Map<string, number>();
+  // Quando o abatedor vinculado é maior que o lançamento que ele cobre
   // (ex.: R$130 de reembolso para uma despesa de R$100), o excedente não pode
-  // simplesmente sumir: a despesa abate só até zero, e a diferença volta a
-  // contar como receita própria do lançamento de reembolso/estorno.
-  const leftoverByReimbursementId = new Map<string, number>();
+  // simplesmente sumir: o abatido reduz só até zero, e a diferença volta a
+  // contar por conta própria (como receita, no reembolso/estorno; como
+  // despesa, no repasse).
+  const leftoverByAbatingId = new Map<string, number>();
   for (const link of links) {
-    const despesaAmount = despesaAmountById.get(link.expense_transaction_id) ?? 0;
-    const alreadyReduced = reductionByDespesaId.get(link.expense_transaction_id) ?? 0;
-    const remainingDespesaAmount = Math.max(0, despesaAmount - alreadyReduced);
-    const absorbed = Math.min(remainingDespesaAmount, link.allocated_amount_cents);
+    const abatedAmount = abatedAmountById.get(link.expense_transaction_id) ?? 0;
+    const alreadyReduced = reductionByAbatedId.get(link.expense_transaction_id) ?? 0;
+    const remainingAbatedAmount = Math.max(0, abatedAmount - alreadyReduced);
+    const absorbed = Math.min(remainingAbatedAmount, link.allocated_amount_cents);
     const leftover = link.allocated_amount_cents - absorbed;
-    reductionByDespesaId.set(link.expense_transaction_id, alreadyReduced + absorbed);
+    reductionByAbatedId.set(link.expense_transaction_id, alreadyReduced + absorbed);
     if (leftover > 0) {
-      leftoverByReimbursementId.set(
+      leftoverByAbatingId.set(
         link.reimbursement_transaction_id,
-        (leftoverByReimbursementId.get(link.reimbursement_transaction_id) ?? 0) + leftover,
+        (leftoverByAbatingId.get(link.reimbursement_transaction_id) ?? 0) + leftover,
       );
     }
   }
 
-  const reimbursementIds = new Set(links.map((l) => l.reimbursement_transaction_id));
+  const abatingIds = new Set(links.map((l) => l.reimbursement_transaction_id));
 
-  return rows
-    .map((row) => {
-      if (row.nature === "despesa" && reductionByDespesaId.has(row.id)) {
-        return { ...row, amount_cents: Math.max(0, row.amount_cents - reductionByDespesaId.get(row.id)!) };
-      }
-      // Reembolso/estorno já contabilizado acima (via redução na despesa) não
-      // pode contar de novo pelo próprio valor — mas se sobrou excedente não
-      // absorvido por nenhuma despesa, esse resto conta como receita própria,
-      // sob uma categoria sintética própria (em vez da categoria real do
-      // lançamento, que costuma estar vazia ou não fazer sentido pra esse
-      // valor específico — é o excedente, não a categoria original).
-      if ((REIMBURSING_NATURES as readonly string[]).includes(row.nature) && reimbursementIds.has(row.id)) {
-        return {
+  const out: RawTx[] = [];
+  for (const row of rows) {
+    if (isAbatableNature(row.nature) && reductionByAbatedId.has(row.id)) {
+      out.push({ ...row, amount_cents: Math.max(0, row.amount_cents - reductionByAbatedId.get(row.id)!) });
+      continue;
+    }
+    // Abatedor já contabilizado (via redução no vinculado) não pode contar de
+    // novo pelo próprio valor — mas se sobrou excedente não absorvido, esse
+    // resto conta por conta própria sob uma categoria sintética. No repasse,
+    // o excedente vira DESPESA (você repassou mais do que a receita cobria);
+    // no reembolso/estorno, vira receita como antes.
+    if ((ABATING_NATURES as readonly string[]).includes(row.nature) && abatingIds.has(row.id)) {
+      const leftover = leftoverByAbatingId.get(row.id) ?? 0;
+      if (leftover === 0) continue;
+
+      if (row.nature === "repasse") {
+        out.push({
           ...row,
-          amount_cents: leftoverByReimbursementId.get(row.id) ?? 0,
+          nature: "despesa",
+          amount_cents: leftover,
+          category_id: LEFTOVER_REPASSE_CATEGORY_ID,
+          category: { name: "Repasse a maior", color: "#f59e0b" },
+          subcategory_id: null,
+          subcategory: null,
+        });
+      } else {
+        out.push({
+          ...row,
+          amount_cents: leftover,
           category_id: LEFTOVER_REIMBURSEMENT_CATEGORY_ID,
           category: { name: "Reembolso a maior", color: "#f59e0b" },
           subcategory_id: null,
           subcategory: null,
-        };
+        });
       }
-      return row;
-    })
-    .filter((row) => !((REIMBURSING_NATURES as readonly string[]).includes(row.nature) && reimbursementIds.has(row.id) && row.amount_cents === 0));
+      continue;
+    }
+    out.push(row);
+  }
+  return out;
 }
 
 function toDashboardInput(tx: RawTx): DashboardTransactionInput {

@@ -16,6 +16,7 @@ export const transactionNatureSchema = z.enum([
   "pagamento_cartao",
   "estorno",
   "reembolso",
+  "repasse",
   "emprestimo",
   "ajuste",
   "nao_classificado",

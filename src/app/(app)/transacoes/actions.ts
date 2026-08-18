@@ -54,7 +54,37 @@ export async function searchExpenseTransactionsAction(spaceId: string, query: st
   }));
 }
 
-const REIMBURSING_NATURES = new Set(["reembolso", "estorno"]);
+/** Usado no picker "Qual receita esse repasse abate?" ao lançar um repasse a terceiros. */
+export async function searchRevenueTransactionsAction(spaceId: string, query: string): Promise<ExpenseSearchResult[]> {
+  if (!query.trim()) return [];
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("id, original_description, amount_cents, movement_date, category:categories!transactions_category_id_fkey(name)")
+    .eq("space_id", spaceId)
+    .in("nature", ["receita_trabalho", "rendimento_investimento", "outras_receitas"])
+    .eq("direction", "entrada")
+    .is("deleted_at", null)
+    .ilike("normalized_description", `%${normalizeDescription(query)}%`)
+    .order("movement_date", { ascending: false })
+    .limit(10);
+
+  if (error || !data) return [];
+
+  return data.map((tx) => ({
+    id: tx.id,
+    originalDescription: tx.original_description,
+    amountCents: tx.amount_cents,
+    movementDate: tx.movement_date,
+    categoryName: (tx.category as unknown as { name: string } | null)?.name ?? null,
+  }));
+}
+
+// Naturezas que abatem um lançamento vinculado: reembolso/estorno (entrada
+// abatendo despesas) e repasse (saída abatendo receitas — dinheiro que nunca
+// foi seu, ex.: parte do sócio num alvará recebido).
+const REIMBURSING_NATURES = new Set(["reembolso", "estorno", "repasse"]);
 
 function parseTransactionFormData(formData: FormData) {
   const accountId = formData.get("accountId");

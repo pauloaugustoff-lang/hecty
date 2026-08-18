@@ -27,6 +27,7 @@ export type TransactionNature =
   | "pagamento_cartao"
   | "estorno"
   | "reembolso"
+  | "repasse"
   | "emprestimo"
   | "ajuste"
   | "nao_classificado";

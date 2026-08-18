@@ -23,6 +23,7 @@ export const natureLabels: Record<TransactionNature, string> = {
   pagamento_cartao: "Pagamento de cartão",
   estorno: "Estorno",
   reembolso: "Reembolso",
+  repasse: "Repasse a terceiros",
   emprestimo: "Empréstimo",
   ajuste: "Ajuste",
   nao_classificado: "Não classificado",
@@ -42,6 +43,7 @@ export const natureTones: Record<TransactionNature, NatureTone> = {
   pagamento_cartao: "transfer",
   estorno: "positive",
   reembolso: "positive",
+  repasse: "neutral",
   emprestimo: "neutral",
   ajuste: "neutral",
   nao_classificado: "pending",
@@ -66,6 +68,7 @@ export const NEUTRAL_NATURES: TransactionNature[] = [
   "resgate_investimento",
   "resgate_a_decompor",
   "pagamento_cartao",
+  "repasse",
   "emprestimo",
   "ajuste",
   "nao_classificado",
@@ -95,6 +98,7 @@ export function categoryKindForNature(nature: TransactionNature, direction?: Tra
     case "transferencia_entre_contas":
     case "pagamento_cartao":
       return "transferencia";
+    case "repasse":
     case "emprestimo":
     case "ajuste":
     case "nao_classificado":
