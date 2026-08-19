@@ -351,7 +351,7 @@ async function upsertRedemptionFromFormData(
     .from("transactions")
     .update({
       nature,
-      classification_status: nature === "resgate_a_decompor" ? "nao_classificado" : "classificado",
+      classification_status: "classificado",
     })
     .eq("id", transactionId);
 }

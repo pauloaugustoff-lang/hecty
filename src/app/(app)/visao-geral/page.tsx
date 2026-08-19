@@ -72,16 +72,23 @@ export default async function VisaoGeralPage({
         <Callout tone="warning" className="mb-6">
           {metrics.transacoesPendentesClassificacao > 0 ? (
             <>
-              {metrics.transacoesPendentesClassificacao} lançamento(s) ainda não classificado(s).{" "}
+              {metrics.transacoesPendentesClassificacao} lançamento(s) ainda não classificado(s) —{" "}
+              <Link href="/revisar" className="font-medium underline">
+                revisar agora
+              </Link>
+              .{" "}
             </>
           ) : null}
           {metrics.resgatesPendentesDecomposicao > 0 ? (
-            <>{metrics.resgatesPendentesDecomposicao} resgate(s) de investimento aguardando decomposição. </>
+            <>
+              {metrics.resgatesPendentesDecomposicao} resgate(s) de investimento aguardando decomposição —{" "}
+              <Link href="/transacoes?nature=resgate_a_decompor" className="font-medium underline">
+                ver resgates
+              </Link>
+              .{" "}
+            </>
           ) : null}
-          Os indicadores abaixo podem estar incompletos.{" "}
-          <Link href="/revisar" className="font-medium underline">
-            Revisar agora
-          </Link>
+          Os indicadores abaixo podem estar incompletos.
         </Callout>
       ) : null}
 
