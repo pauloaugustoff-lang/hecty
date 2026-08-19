@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Landmark } from "lucide-react";
 import { AccountFormDialog } from "./account-form-dialog";
 import { ArchiveAccountButton } from "./archive-account-button";
+import { DeleteAccountButton } from "./delete-account-button";
 
 export default async function ContasPage() {
   const space = await requireCurrentSpace();
@@ -93,6 +94,7 @@ export default async function ContasPage() {
                   <Td>
                     <div className="flex justify-end gap-1">
                       <ArchiveAccountButton accountId={account.id} isArchived={true} />
+                      <DeleteAccountButton accountId={account.id} spaceId={space.id} accountName={account.name} />
                     </div>
                   </Td>
                 </Tr>
