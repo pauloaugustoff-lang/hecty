@@ -14,6 +14,8 @@ export interface BulkClassifyInput {
   categoryId: string | null;
   subcategoryId: string | null;
   counterparty: string | null;
+  /** Em branco/null = não alterar. Preenchido = aplica a todos. */
+  notes?: string | null;
   createRule: boolean;
   ruleMatchValue: string | null;
 }
@@ -43,6 +45,7 @@ export async function bulkClassifyAction(spaceId: string, userId: string, input:
         // revisão — o valor fixo tirava esses lançamentos da fila pra sempre.
         classification_status: classificationStatusFor(input.nature, Boolean(input.categoryId)),
         ...(input.counterparty ? { counterparty: input.counterparty } : {}),
+        ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
       },
       { count: "exact" },
     )

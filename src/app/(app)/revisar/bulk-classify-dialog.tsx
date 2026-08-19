@@ -10,7 +10,7 @@ import type { TransactionNature } from "@/lib/supabase/types";
 import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
 import { sortByName, sortEntriesByLabel } from "@/lib/utils/sort";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -44,6 +44,7 @@ export function BulkClassifyDialog({
   const [categoryId, setCategoryId] = useState("");
   const [subcategoryId, setSubcategoryId] = useState("");
   const [counterparty, setCounterparty] = useState("");
+  const [notes, setNotes] = useState("");
   const [createRule, setCreateRule] = useState(true);
 
   // Direção só serve de dica pra naturezas ambíguas por si só (empréstimo,
@@ -87,6 +88,7 @@ export function BulkClassifyDialog({
         categoryId: categoryId || null,
         subcategoryId: subcategoryId || null,
         counterparty: counterparty || null,
+        notes: notes.trim() || null,
         createRule: createRule && Boolean(commonDescription),
         ruleMatchValue: commonDescription,
       });
@@ -172,6 +174,10 @@ export function BulkClassifyDialog({
           <div>
             <Label htmlFor="counterparty">Estabelecimento (opcional, aplica a todos)</Label>
             <Input id="counterparty" value={counterparty} onChange={(e) => setCounterparty(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="bulk-classify-notes">Observações (opcional, aplica a todos)</Label>
+            <Textarea id="bulk-classify-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </div>
 
           {commonDescription ? (

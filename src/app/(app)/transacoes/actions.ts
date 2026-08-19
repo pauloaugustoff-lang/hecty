@@ -399,6 +399,10 @@ export interface BulkUpdateCategoryInput {
   nature: TransactionNature | null;
   /** Tags a ACRESCENTAR às existentes de cada lançamento (nunca substitui). */
   addTags?: string[];
+  /** Em branco/ausente = não alterar. Preenchido = aplica a todos. */
+  counterparty?: string;
+  notes?: string;
+  description?: string;
 }
 
 export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdateCategoryInput): Promise<ActionState> {
@@ -406,16 +410,21 @@ export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdat
 
   const touchesCategory = input.categoryId !== undefined;
   const addTags = input.addTags ?? [];
-  if (!touchesCategory && !input.nature && addTags.length === 0) {
+  const counterparty = input.counterparty?.trim() || undefined;
+  const notes = input.notes?.trim() || undefined;
+  const description = input.description?.trim() || undefined;
+  if (!touchesCategory && !input.nature && addTags.length === 0 && !counterparty && !notes && !description) {
     return { error: "Nenhuma alteração selecionada." };
   }
 
   const supabase = await createClient();
 
-  // Tags acrescentam às existentes (payload difere por linha) e, quando a
+  // Tags acrescentam às existentes (payload difere por linha); quando a
   // natureza muda sem mexer na categoria, o status depende da categoria que
-  // cada linha JÁ tem — nos dois casos é preciso ler as linhas antes.
-  const needsRowData = addTags.length > 0 || (Boolean(input.nature) && !touchesCategory);
+  // cada linha JÁ tem; e trocar a descrição exige recalcular o dedup_hash de
+  // cada linha (ele deriva de conta/data/valor/direção/descrição). Nesses
+  // casos é preciso ler as linhas antes.
+  const needsRowData = addTags.length > 0 || Boolean(description) || (Boolean(input.nature) && !touchesCategory);
 
   if (!needsRowData) {
     const update: {
@@ -423,6 +432,8 @@ export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdat
       subcategory_id?: string | null;
       nature?: TransactionNature;
       classification_status?: "classificado" | "nao_classificado";
+      counterparty?: string;
+      notes?: string;
     } = {};
     if (touchesCategory) {
       update.category_id = input.categoryId ?? null;
@@ -432,6 +443,8 @@ export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdat
       update.nature = input.nature;
       update.classification_status = classificationStatusFor(input.nature, Boolean(input.categoryId));
     }
+    if (counterparty) update.counterparty = counterparty;
+    if (notes) update.notes = notes;
 
     const { error } = await supabase.from("transactions").update(update).eq("space_id", spaceId).in("id", input.transactionIds);
     if (error) {
@@ -440,7 +453,7 @@ export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdat
   } else {
     const { data: rows, error: fetchError } = await supabase
       .from("transactions")
-      .select("id, tags, category_id")
+      .select("id, tags, category_id, account_id, card_id, movement_date, amount_cents, direction")
       .eq("space_id", spaceId)
       .in("id", input.transactionIds);
     if (fetchError || !rows) {
@@ -455,6 +468,11 @@ export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdat
       nature?: TransactionNature;
       classification_status?: "classificado" | "nao_classificado";
       tags?: string[];
+      counterparty?: string;
+      notes?: string;
+      original_description?: string;
+      normalized_description?: string;
+      dedup_hash?: string;
     }
     const groups = new Map<string, { payload: BulkRowPayload; ids: string[] }>();
     for (const row of rows) {
@@ -471,6 +489,23 @@ export async function bulkUpdateCategoryAction(spaceId: string, input: BulkUpdat
       if (addTags.length > 0) {
         payload.tags = Array.from(new Set([...(row.tags ?? []), ...addTags]));
       }
+      if (description) {
+        payload.original_description = description;
+        payload.normalized_description = normalizeDescription(description);
+        // Mesma regra do update individual: o hash deriva da descrição, então
+        // precisa acompanhar a mudança — e varia por linha (data/valor/conta).
+        payload.dedup_hash = computeDedupHash({
+          spaceId,
+          accountId: row.account_id,
+          cardId: row.card_id,
+          movementDate: row.movement_date,
+          amountCents: row.amount_cents,
+          direction: row.direction,
+          description,
+        });
+      }
+      if (counterparty) payload.counterparty = counterparty;
+      if (notes) payload.notes = notes;
 
       const key = JSON.stringify(payload);
       const group = groups.get(key) ?? { payload, ids: [] };

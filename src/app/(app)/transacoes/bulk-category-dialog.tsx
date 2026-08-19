@@ -10,7 +10,7 @@ import type { TransactionNature } from "@/lib/supabase/types";
 import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
 import { sortByName, sortEntriesByLabel } from "@/lib/utils/sort";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -51,6 +51,9 @@ export function BulkCategoryDialog({
   const [categoryChoice, setCategoryChoice] = useState(KEEP_CATEGORY);
   const [subcategoryId, setSubcategoryId] = useState("");
 
+  const [description, setDescription] = useState("");
+  const [counterparty, setCounterparty] = useState("");
+  const [notes, setNotes] = useState("");
   const [localTags, setLocalTags] = useState<TagRow[]>(tags);
   const [selectedTagNames, setSelectedTagNames] = useState<string[]>([]);
   const [tagSearch, setTagSearch] = useState("");
@@ -77,7 +80,13 @@ export function BulkCategoryDialog({
   }, [localTags, tagSearch, selectedTagNames]);
   const hasExactTagMatch = localTags.some((t) => t.name.toLowerCase() === tagSearch.trim().toLowerCase());
 
-  const hasChanges = Boolean(nature) || categoryChoice !== KEEP_CATEGORY || selectedTagNames.length > 0;
+  const hasChanges =
+    Boolean(nature) ||
+    categoryChoice !== KEEP_CATEGORY ||
+    selectedTagNames.length > 0 ||
+    description.trim().length > 0 ||
+    counterparty.trim().length > 0 ||
+    notes.trim().length > 0;
 
   function changeNature(next: TransactionNature | "") {
     const nextKind = next ? categoryKindForNature(next) : null;
@@ -119,6 +128,9 @@ export function BulkCategoryDialog({
           : { categoryId: categoryChoice === CLEAR_CATEGORY ? null : categoryChoice, subcategoryId: subcategoryId || null }),
         nature: nature || null,
         addTags: selectedTagNames,
+        description: description.trim() || undefined,
+        counterparty: counterparty.trim() || undefined,
+        notes: notes.trim() || undefined,
       });
 
       if (result.error) {
@@ -133,6 +145,9 @@ export function BulkCategoryDialog({
       setSubcategoryId("");
       setSelectedTagNames([]);
       setTagSearch("");
+      setDescription("");
+      setCounterparty("");
+      setNotes("");
       onDone();
     });
   }
@@ -280,6 +295,38 @@ export function BulkCategoryDialog({
                 </div>
               </div>
             ) : null}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label htmlFor="bulk-description">Descrição</Label>
+              <Input
+                id="bulk-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={200}
+                placeholder="Em branco = não alterar; preenchida, substitui a descrição dos selecionados"
+              />
+            </div>
+            <div className="col-span-2">
+              <Label htmlFor="bulk-counterparty">Estabelecimento / contraparte</Label>
+              <Input
+                id="bulk-counterparty"
+                value={counterparty}
+                onChange={(e) => setCounterparty(e.target.value)}
+                placeholder="Em branco = não alterar"
+              />
+            </div>
+            <div className="col-span-2">
+              <Label htmlFor="bulk-notes">Observações</Label>
+              <Textarea
+                id="bulk-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                placeholder="Em branco = não alterar; preenchido, substitui as observações dos selecionados"
+              />
+            </div>
           </div>
         </div>
 
