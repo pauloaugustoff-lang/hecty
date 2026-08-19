@@ -563,17 +563,26 @@ export async function createTransferAction(
   let toAmountCents: number | undefined;
   let notes = "";
   if (fromCurrency !== toCurrency) {
-    let rate: number;
-    try {
-      rate = parseDecimalPtBR(rateInput);
-    } catch {
-      return { error: `Informe a cotação usada (1 ${fromCurrency} = ? ${toCurrency}).` };
+    // Preferência pelo valor creditado no destino (o comprovante do banco
+    // mostra esse número exato, já com tarifas/VET embutidos); a cotação
+    // digitada é o caminho alternativo.
+    const destAmountRaw = Number(formData.get("toAmountCents") ?? 0);
+    if (Number.isFinite(destAmountRaw) && destAmountRaw > 0) {
+      toAmountCents = Math.round(destAmountRaw);
+    } else {
+      let rate: number;
+      try {
+        rate = parseDecimalPtBR(rateInput);
+      } catch {
+        return { error: `Informe o valor creditado no destino ou a cotação (1 ${fromCurrency} = ? ${toCurrency}).` };
+      }
+      if (rate <= 0) {
+        return { error: "A cotação deve ser maior que zero." };
+      }
+      toAmountCents = Math.round(amountCents * rate);
     }
-    if (rate <= 0) {
-      return { error: "A cotação deve ser maior que zero." };
-    }
-    toAmountCents = Math.round(amountCents * rate);
-    notes = `Câmbio: 1 ${fromCurrency} = ${rate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${toCurrency}`;
+    const impliedRate = toAmountCents / amountCents;
+    notes = `Câmbio: 1 ${fromCurrency} = ${impliedRate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${toCurrency}`;
   }
 
   let pair;

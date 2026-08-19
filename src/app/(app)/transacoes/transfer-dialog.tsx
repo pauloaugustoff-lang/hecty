@@ -32,6 +32,7 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
   const [toAccountId, setToAccountId] = useState("");
   const [amountInput, setAmountInput] = useState("");
   const [rateInput, setRateInput] = useState("");
+  const [destAmountInput, setDestAmountInput] = useState("");
 
   const fromCurrency = accounts.find((a) => a.id === fromAccountId)?.currency;
   const toCurrency = accounts.find((a) => a.id === toAccountId)?.currency;
@@ -57,7 +58,24 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
   } catch {
     rate = null;
   }
-  const convertedCents = isCrossCurrency && rate && amountCents ? Math.round(amountCents * rate) : null;
+  const rateInvalid = rateInput.trim().length > 0 && rate === null;
+
+  let destAmountCents = 0;
+  try {
+    destAmountCents = destAmountInput ? parseBRLToCents(destAmountInput) : 0;
+  } catch {
+    destAmountCents = 0;
+  }
+
+  // O valor creditado no destino (do comprovante do banco, já com tarifas)
+  // tem prioridade; a cotação é o caminho alternativo.
+  const convertedCents = !isCrossCurrency
+    ? null
+    : destAmountCents > 0
+      ? destAmountCents
+      : rate && amountCents
+        ? Math.round(amountCents * rate)
+        : null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -83,6 +101,7 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
           <input type="hidden" name="toAccountId" value={toAccountId} />
           <input type="hidden" name="amountCents" value={amountCents} />
           {isCrossCurrency ? <input type="hidden" name="exchangeRate" value={rateInput} /> : null}
+          {isCrossCurrency && destAmountCents > 0 ? <input type="hidden" name="toAmountCents" value={destAmountCents} /> : null}
 
           <div>
             <Label htmlFor="fromAccountId">De</Label>
@@ -126,22 +145,42 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
           </div>
 
           {isCrossCurrency ? (
-            <div className="rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-3">
-              <Label htmlFor="exchangeRate">
-                Cotação (1 {fromCurrency} = ? {toCurrency})
-              </Label>
-              <Input
-                id="exchangeRate"
-                inputMode="decimal"
-                required
-                value={rateInput}
-                onChange={(e) => setRateInput(e.target.value)}
-                placeholder="Ex.: 5,20"
-              />
-              <p className="mt-1.5 text-[11px] text-text-secondary">
+            <div className="space-y-3 rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-3">
+              <div>
+                <Label htmlFor="destAmount">Valor creditado no destino ({toCurrency})</Label>
+                <Input
+                  id="destAmount"
+                  inputMode="decimal"
+                  value={destAmountInput}
+                  onChange={(e) => setDestAmountInput(e.target.value)}
+                  placeholder="0,00"
+                />
+                <p className="mt-1 text-[11px] text-text-tertiary">
+                  O jeito mais preciso: copie do comprovante o valor exato que chegou em {toCurrency} (já com tarifas/VET).
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="exchangeRate">
+                  Ou informe a cotação (1 {fromCurrency} = ? {toCurrency})
+                </Label>
+                <Input
+                  id="exchangeRate"
+                  inputMode="decimal"
+                  value={rateInput}
+                  onChange={(e) => setRateInput(e.target.value)}
+                  placeholder="Ex.: 0,1526"
+                  invalid={rateInvalid}
+                />
+                {rateInvalid ? (
+                  <p className="mt-1 text-[11px] text-negative">
+                    Digite apenas o número da cotação (ex.: 0,1526) — sem texto como &quot;1 EUR = …&quot;.
+                  </p>
+                ) : null}
+              </div>
+              <p className="text-[11px] text-text-secondary">
                 {convertedCents !== null
                   ? `A conta de destino recebe ${formatCents(convertedCents, toCurrency)}.`
-                  : "Informe a cotação usada nessa transferência para calcular quanto entra na conta de destino."}
+                  : "Preencha um dos dois campos acima para calcular quanto entra na conta de destino."}
               </p>
             </div>
           ) : null}
@@ -160,7 +199,7 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
             <Button
               type="submit"
               variant="primary"
-              disabled={isPending || !fromAccountId || !toAccountId || (isCrossCurrency && !rate)}
+              disabled={isPending || !fromAccountId || !toAccountId || (isCrossCurrency && convertedCents === null)}
             >
               {isPending ? "Salvando…" : "Transferir"}
             </Button>
