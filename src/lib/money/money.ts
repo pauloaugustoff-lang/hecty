@@ -7,14 +7,27 @@
 export type Cents = number;
 
 /** Moedas com conta cadastrável hoje. Conversão automática entre elas ainda não existe. */
-export const CURRENCIES = ["BRL", "USD", "EUR"] as const;
+export const CURRENCIES = ["BRL", "USD", "EUR", "BTC"] as const;
 export type CurrencyCode = (typeof CURRENCIES)[number];
 
 export const CURRENCY_LABELS: Record<CurrencyCode, string> = {
   BRL: "Real (R$)",
   USD: "Dólar (US$)",
   EUR: "Euro (€)",
+  BTC: "Bitcoin (BTC)",
 };
+
+/**
+ * Casas decimais da menor unidade de cada moeda. "Centavos" no sistema
+ * significa a menor unidade da moeda da conta: centavos de real/dólar/euro
+ * (2 casas) ou satoshis (8 casas) — 0,00000001 BTC não caberia em 2 casas.
+ * Moeda fora do mapa assume 2.
+ */
+const CURRENCY_DECIMALS: Record<string, number> = { BTC: 8 };
+
+export function currencyDecimals(currency: string): number {
+  return CURRENCY_DECIMALS[currency] ?? 2;
+}
 
 const formatterCache = new Map<string, Intl.NumberFormat>();
 
@@ -22,19 +35,23 @@ function getFormatter(currency: string, signed: boolean): Intl.NumberFormat {
   const key = `${currency}:${signed}`;
   let formatter = formatterCache.get(key);
   if (!formatter) {
+    const decimals = currencyDecimals(currency);
     formatter = new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency,
       signDisplay: signed ? "always" : "auto",
+      // Moedas de 8 casas (BTC) mostram só as casas necessárias, sem uma
+      // cauda fixa de zeros; as de 2 casas mantêm o padrão da moeda.
+      ...(decimals !== 2 ? { minimumFractionDigits: 2, maximumFractionDigits: decimals } : {}),
     });
     formatterCache.set(key, formatter);
   }
   return formatter;
 }
 
-/** Formata centavos numa moeda qualquer (padrão BRL, pra não quebrar chamadores existentes). */
+/** Formata a menor unidade da moeda (centavos/satoshis) como valor legível. */
 export function formatCents(cents: Cents, currency: string = "BRL", options?: { signed?: boolean }): string {
-  return getFormatter(currency, Boolean(options?.signed)).format(cents / 100);
+  return getFormatter(currency, Boolean(options?.signed)).format(cents / 10 ** currencyDecimals(currency));
 }
 
 export function formatCentsToBRL(cents: Cents, options?: { signed?: boolean }): string {
@@ -82,11 +99,19 @@ export function parseDecimalPtBR(input: string): number {
 }
 
 /**
+ * Converte um valor digitado pelo usuário na menor unidade inteira da moeda
+ * (centavos para 2 casas, satoshis para BTC). Lança erro se inválido.
+ */
+export function parseToCents(input: string, currency: string = "BRL"): Cents {
+  return Math.round(parseDecimalPtBR(input) * 10 ** currencyDecimals(currency));
+}
+
+/**
  * Converte um valor digitado pelo usuário (ex.: "1.234,56" ou "1234.56")
  * em centavos inteiros. Lança erro se o texto não for um número válido.
  */
 export function parseBRLToCents(input: string): Cents {
-  return Math.round(parseDecimalPtBR(input) * 100);
+  return parseToCents(input, "BRL");
 }
 
 /** Valor com sinal: entradas positivas, saídas negativas. */

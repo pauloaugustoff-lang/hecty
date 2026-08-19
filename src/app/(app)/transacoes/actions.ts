@@ -8,7 +8,7 @@ import { normalizeDescription } from "@/lib/import/normalize";
 import { computeDedupHash } from "@/lib/import/dedup";
 import { buildTransferPair } from "@/lib/transactions/transfers";
 import { redemptionNature } from "@/lib/money/redemption";
-import { parseDecimalPtBR } from "@/lib/money/money";
+import { parseDecimalPtBR, currencyDecimals } from "@/lib/money/money";
 import { classificationStatusFor } from "@/lib/domain/classification";
 import { revalidateTransactionData } from "@/lib/revalidate-financial";
 import { randomUUID } from "node:crypto";
@@ -567,6 +567,10 @@ export async function createTransferAction(
     // mostra esse número exato, já com tarifas/VET embutidos); a cotação
     // digitada é o caminho alternativo.
     const destAmountRaw = Number(formData.get("toAmountCents") ?? 0);
+    // As pernas usam a menor unidade da própria moeda (centavos ou satoshis),
+    // então a conversão por cotação reescala entre as casas decimais das duas
+    // moedas — multiplicar os inteiros direto erraria por 10^6 em BRL↔BTC.
+    const decimalsShift = 10 ** (currencyDecimals(toCurrency) - currencyDecimals(fromCurrency));
     if (Number.isFinite(destAmountRaw) && destAmountRaw > 0) {
       toAmountCents = Math.round(destAmountRaw);
     } else {
@@ -579,10 +583,11 @@ export async function createTransferAction(
       if (rate <= 0) {
         return { error: "A cotação deve ser maior que zero." };
       }
-      toAmountCents = Math.round(amountCents * rate);
+      toAmountCents = Math.round(amountCents * rate * decimalsShift);
     }
-    const impliedRate = toAmountCents / amountCents;
-    notes = `Câmbio: 1 ${fromCurrency} = ${impliedRate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} ${toCurrency}`;
+    const impliedRate =
+      toAmountCents / 10 ** currencyDecimals(toCurrency) / (amountCents / 10 ** currencyDecimals(fromCurrency));
+    notes = `Câmbio: 1 ${fromCurrency} = ${impliedRate.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 8 })} ${toCurrency}`;
   }
 
   let pair;

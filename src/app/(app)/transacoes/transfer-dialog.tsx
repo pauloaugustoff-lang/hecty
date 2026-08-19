@@ -5,7 +5,7 @@ import { ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 import { createTransferAction, type TransferActionState } from "./actions";
 import type { AccountRow } from "@/lib/data/accounts";
-import { parseBRLToCents, parseDecimalPtBR, formatCents } from "@/lib/money/money";
+import { parseToCents, parseDecimalPtBR, formatCents, currencyDecimals } from "@/lib/money/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,9 +45,10 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
     }
   }, [state]);
 
+  // Cada perna usa a menor unidade da PRÓPRIA moeda (centavos ou satoshis).
   let amountCents = 0;
   try {
-    amountCents = amountInput ? parseBRLToCents(amountInput) : 0;
+    amountCents = amountInput ? parseToCents(amountInput, fromCurrency ?? "BRL") : 0;
   } catch {
     amountCents = 0;
   }
@@ -62,19 +63,22 @@ export function TransferDialog({ spaceId, accounts }: { spaceId: string; account
 
   let destAmountCents = 0;
   try {
-    destAmountCents = destAmountInput ? parseBRLToCents(destAmountInput) : 0;
+    destAmountCents = destAmountInput ? parseToCents(destAmountInput, toCurrency ?? "BRL") : 0;
   } catch {
     destAmountCents = 0;
   }
 
   // O valor creditado no destino (do comprovante do banco, já com tarifas)
-  // tem prioridade; a cotação é o caminho alternativo.
+  // tem prioridade; a cotação é o caminho alternativo. A conversão por
+  // cotação reescala entre as menores unidades das duas moedas (2 casas ↔ 8
+  // casas no caso de BTC), não só multiplica os inteiros.
+  const decimalsShift = 10 ** (currencyDecimals(toCurrency ?? "BRL") - currencyDecimals(fromCurrency ?? "BRL"));
   const convertedCents = !isCrossCurrency
     ? null
     : destAmountCents > 0
       ? destAmountCents
       : rate && amountCents
-        ? Math.round(amountCents * rate)
+        ? Math.round(amountCents * rate * decimalsShift)
         : null;
 
   return (

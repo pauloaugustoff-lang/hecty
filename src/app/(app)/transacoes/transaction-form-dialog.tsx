@@ -21,7 +21,7 @@ import type { CategoryRow } from "@/lib/data/categories";
 import type { TagRow } from "@/lib/data/tags";
 import type { TransactionNature, TransactionDirection, CategoryKind } from "@/lib/supabase/types";
 import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
-import { parseBRLToCents, formatCentsToBRL, formatCents } from "@/lib/money/money";
+import { parseBRLToCents, parseToCents, formatCentsToBRL, formatCents } from "@/lib/money/money";
 import { getStatementPeriod } from "@/lib/transactions/cards";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -232,9 +232,11 @@ export function TransactionFormDialog({
     }
   }, [state, isEdit]);
 
+  // Menor unidade da moeda da conta/cartão selecionado: centavos, ou
+  // satoshis quando a conta é BTC (8 casas decimais).
   let amountCents = 0;
   try {
-    amountCents = amountInput ? parseBRLToCents(amountInput) : 0;
+    amountCents = amountInput ? parseToCents(amountInput, selectedCurrency) : 0;
   } catch {
     amountCents = 0;
   }

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { createAccountAction, updateAccountAction, type ActionState } from "./actions";
 import type { AccountRow } from "@/lib/data/accounts";
 import { accountTypeLabels } from "@/lib/domain/labels";
-import { parseBRLToCents, formatCents, CURRENCIES, CURRENCY_LABELS, type CurrencyCode } from "@/lib/money/money";
+import { parseToCents, formatCents, CURRENCIES, CURRENCY_LABELS, type CurrencyCode } from "@/lib/money/money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,9 +48,11 @@ export function AccountFormDialog({ spaceId, account }: { spaceId: string; accou
     }
   }, [state, isEdit]);
 
+  // Menor unidade da moeda da conta: centavos (2 casas) ou satoshis (BTC, 8).
+  const effectiveCurrency = isEdit ? account!.currency : currency;
   let initialBalanceCents = 0;
   try {
-    initialBalanceCents = balanceInput ? parseBRLToCents(balanceInput) : 0;
+    initialBalanceCents = balanceInput ? parseToCents(balanceInput, effectiveCurrency) : 0;
   } catch {
     initialBalanceCents = 0;
   }

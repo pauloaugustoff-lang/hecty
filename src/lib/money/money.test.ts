@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCents, formatCentsToBRL, parseBRLToCents, signedCents, sumCents } from "./money";
+import { formatCents, formatCentsToBRL, parseBRLToCents, parseToCents, signedCents, sumCents } from "./money";
 
 const NBSP = " ";
 
@@ -23,6 +23,19 @@ describe("formatCents", () => {
   it("formata em outras moedas quando informado", () => {
     expect(formatCents(10500, "USD")).toContain("105,00");
     expect(formatCents(10500, "USD")).not.toBe(formatCentsToBRL(10500));
+  });
+
+  it("BTC usa 8 casas (satoshis) na menor unidade", () => {
+    expect(formatCents(234_000, "BTC")).toContain("0,00234");
+    expect(formatCents(100_000_000, "BTC")).toContain("1,00");
+  });
+});
+
+describe("parseToCents", () => {
+  it("interpreta o valor na menor unidade da moeda", () => {
+    expect(parseToCents("105,00", "USD")).toBe(10_500);
+    expect(parseToCents("0,00234", "BTC")).toBe(234_000);
+    expect(parseToCents("1", "BTC")).toBe(100_000_000);
   });
 });
 
