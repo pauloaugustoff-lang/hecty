@@ -38,7 +38,7 @@ export default async function ImportarPage() {
       {batches.length > 0 ? (
         <div className="mt-10">
           <h2 className="mb-3 font-display text-base font-medium text-text-primary">Importações anteriores</h2>
-          <div className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle">
+          <div className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
             {batches.map((batch) => (
               <Link
                 key={batch.id}

@@ -56,7 +56,7 @@ export default async function RegrasPage() {
           action={<RuleFormDialog spaceId={space.id} userId={user.id} accounts={accounts} cards={cards} categories={categories} />}
         />
       ) : (
-        <div className="rounded-[var(--radius-lg)] border border-border-subtle">
+        <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
           <Table>
             <Thead>
               <Tr>

@@ -41,13 +41,13 @@ export default async function RelatoriosPage() {
     <div className="space-y-8">
       <PageHeader title="Relatórios" description="Análises complementares ao painel principal." />
 
-      <section className="rounded-[var(--radius-lg)] border border-border-subtle p-6">
+      <section className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-6">
         <h2 className="mb-1 font-display text-base font-medium text-text-primary">Evolução de receitas e despesas</h2>
         <p className="mb-3 text-[13px] text-text-secondary">Últimos 12 meses.</p>
         <RevenueExpenseChart data={series} />
       </section>
 
-      <section className="rounded-[var(--radius-lg)] border border-border-subtle p-6">
+      <section className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-6">
         <h2 className="mb-1 font-display text-base font-medium text-text-primary">Maiores variações por categoria</h2>
         <p className="mb-3 text-[13px] text-text-secondary">Comparação do mês atual com o anterior.</p>
         {variations.length === 0 ? (
@@ -72,7 +72,7 @@ export default async function RelatoriosPage() {
         )}
       </section>
 
-      <section className="rounded-[var(--radius-lg)] border border-border-subtle p-6">
+      <section className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-6">
         <h2 className="mb-1 font-display text-base font-medium text-text-primary">Despesas recorrentes</h2>
         <p className="mb-3 text-[13px] text-text-secondary">Descrições que aparecem em pelo menos 3 dos últimos 6 meses.</p>
         {recurring.length === 0 ? (

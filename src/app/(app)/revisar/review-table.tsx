@@ -177,7 +177,7 @@ export function ReviewTable({
         </div>
       </div>
 
-      <div className="rounded-[var(--radius-lg)] border border-border-subtle">
+      <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
         <Table>
           <Thead>
             <Tr>

@@ -28,7 +28,7 @@ export function Logo({
           alt="Hecty"
           width={width}
           height={height}
-          className="h-full w-auto"
+          className={cn("h-full w-auto", variant === "dark" && "rounded-[8px]")}
           priority
         />
       </span>
@@ -50,7 +50,7 @@ export function Logo({
         alt="Hecty"
         width={width}
         height={height}
-        className="logo-for-dark h-full w-auto"
+        className="logo-for-dark h-full w-auto rounded-[8px]"
         priority
       />
     </span>

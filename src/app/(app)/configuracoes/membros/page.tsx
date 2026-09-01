@@ -29,7 +29,7 @@ export default async function MembrosPage() {
         <InviteForm spaceId={space.id} />
       </div>
 
-      <div className="mb-8 rounded-[var(--radius-lg)] border border-border-subtle">
+      <div className="mb-8 rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
         <Table>
           <Thead>
             <Tr>
@@ -57,7 +57,7 @@ export default async function MembrosPage() {
       {pendingInvites.length > 0 ? (
         <div>
           <h2 className="mb-3 font-display text-base font-medium text-text-primary">Convites pendentes</h2>
-          <div className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle">
+          <div className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
             {pendingInvites.map((invite) => (
               <div key={invite.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
                 <span>

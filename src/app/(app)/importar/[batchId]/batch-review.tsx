@@ -66,7 +66,7 @@ export function BatchReview({ batchId, spaceId, rows }: { batchId: string; space
         </Button>
       </div>
 
-      <div className="rounded-[var(--radius-lg)] border border-border-subtle">
+      <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
         <Table>
           <Thead>
             <Tr>

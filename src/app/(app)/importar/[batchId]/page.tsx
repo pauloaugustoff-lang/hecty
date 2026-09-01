@@ -39,7 +39,7 @@ export default async function ImportBatchPage({ params }: { params: Promise<{ ba
         <BatchReview batchId={batch.id} spaceId={space.id} rows={rows} />
       ) : (
         <div className="space-y-4">
-          <div className="rounded-[var(--radius-lg)] border border-border-subtle p-4 text-sm text-text-secondary">
+          <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-4 text-sm text-text-secondary">
             {batch.status === "concluida"
               ? `${batch.imported_rows} lançamento(s) importado(s), ${batch.ignored_rows} ignorado(s).`
               : batch.status === "desfeita"
@@ -48,7 +48,7 @@ export default async function ImportBatchPage({ params }: { params: Promise<{ ba
           </div>
 
           {rows.length > 0 ? (
-            <div className="rounded-[var(--radius-lg)] border border-border-subtle">
+            <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
               <Table>
                 <Thead>
                   <Tr>

@@ -46,7 +46,7 @@ export default async function ContasPage() {
           action={<AccountFormDialog spaceId={space.id} />}
         />
       ) : (
-        <div className="rounded-[var(--radius-lg)] border border-border-subtle">
+        <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
           <Table>
             <Thead>
               <Tr>

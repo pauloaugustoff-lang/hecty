@@ -90,7 +90,7 @@ export function ImportWizard({ spaceId, accounts, cards }: { spaceId: string; ac
       {error ? <Callout tone="danger">{error}</Callout> : null}
 
       {!analysis ? (
-        <div className="space-y-4 rounded-[var(--radius-lg)] border border-border-subtle p-6">
+        <div className="space-y-4 rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-6">
           <div>
             <Label htmlFor="source">Importar para</Label>
             <Select value={source} onValueChange={setSource}>
@@ -137,7 +137,7 @@ export function ImportWizard({ spaceId, accounts, cards }: { spaceId: string; ac
           </Button>
         </div>
       ) : (
-        <div className="space-y-4 rounded-[var(--radius-lg)] border border-border-subtle p-6">
+        <div className="space-y-4 rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-6">
           <div className="flex items-center gap-2 text-sm text-text-secondary">
             <FileSpreadsheet className="h-4 w-4" />
             {analysis.fileName} · {analysis.totalRows} linha(s) encontrada(s)

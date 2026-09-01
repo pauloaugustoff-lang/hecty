@@ -40,7 +40,7 @@ export default async function TagsPage() {
           action={<TagFormDialog spaceId={space.id} />}
         />
       ) : (
-        <div className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle">
+        <div className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
           {tags.map((tag, i) => (
             <div key={tag.id} className="flex items-center justify-between px-4 py-2.5">
               <div className="flex items-center gap-2">

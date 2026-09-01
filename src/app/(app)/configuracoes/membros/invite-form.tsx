@@ -23,7 +23,7 @@ export function InviteForm({ spaceId }: { spaceId: string }) {
   }, [state]);
 
   return (
-    <div className="space-y-3 rounded-[var(--radius-lg)] border border-border-subtle p-4">
+    <div className="space-y-3 rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-4">
       {state.error ? <Callout tone="danger">{state.error}</Callout> : null}
       <form action={formAction} className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="role" value={role} />

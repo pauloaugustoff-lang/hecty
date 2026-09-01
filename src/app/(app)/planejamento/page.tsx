@@ -48,7 +48,7 @@ export default async function PlanejamentoPage({ searchParams }: { searchParams:
       {expenseCategories.length === 0 ? (
         <EmptyState icon={Target} title="Nenhuma categoria de despesa" description="Crie categorias de despesa em Configurações para planejar seus gastos." />
       ) : (
-        <div className="rounded-[var(--radius-lg)] border border-border-subtle">
+        <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
           <Table>
             <Thead>
               <Tr>

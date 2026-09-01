@@ -118,7 +118,7 @@ export function TransactionsTable({
         </div>
       ) : null}
 
-      <div className="rounded-[var(--radius-lg)] border border-border-subtle">
+      <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
         <Table>
           <Thead>
             <Tr>

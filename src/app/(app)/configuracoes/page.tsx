@@ -30,7 +30,7 @@ export default async function ConfiguracoesPage() {
 
       <section className="space-y-2">
         <h2 className="font-display text-base font-medium text-text-primary">Navegação rápida</h2>
-        <div className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle">
+        <div className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
           <Link href="/configuracoes/categorias" className="flex items-center justify-between px-4 py-3 text-sm hover:bg-surface-sunken">
             <span className="flex items-center gap-2">
               <Tag className="h-4 w-4 text-text-tertiary" /> Categorias

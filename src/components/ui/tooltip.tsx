@@ -17,7 +17,7 @@ export function TooltipContent({
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
         className={cn(
-          "z-50 rounded-[var(--radius-sm)] bg-[var(--navy)] px-2 py-1 text-xs text-[var(--bg-main)] shadow-[var(--shadow-md)]",
+          "z-50 rounded-[var(--radius-sm)] bg-[var(--text-primary)] px-2 py-1 text-xs text-[var(--surface)] shadow-[var(--shadow-md)]",
           "data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in",
           className,
         )}

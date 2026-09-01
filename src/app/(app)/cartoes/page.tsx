@@ -39,7 +39,7 @@ export default async function CartoesPage() {
           action={<CardFormDialog spaceId={space.id} accounts={accounts} />}
         />
       ) : (
-        <div className="rounded-[var(--radius-lg)] border border-border-subtle">
+        <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
           <Table>
             <Thead>
               <Tr>

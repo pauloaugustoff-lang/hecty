@@ -36,17 +36,17 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
               href={item.href}
               onClick={onNavigate}
               className={cn(
-                "flex items-center gap-2.5 rounded-[var(--radius-md)] px-4 py-3 text-[13px] font-medium transition-colors",
+                "flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-[13px] font-medium transition-colors",
                 isActive
-                  ? "bg-[var(--blue)] text-white shadow-[var(--shadow-sm)]"
-                  : "text-white/65 hover:bg-white/[0.06] hover:text-white",
+                  ? "bg-accent-soft text-accent"
+                  : "text-text-secondary hover:bg-surface-sunken hover:text-text-primary",
                 item.future && "opacity-60",
               )}
             >
-              <Icon className="h-[15px] w-[15px] shrink-0" strokeWidth={1.75} />
+              <Icon className="h-[15px] w-[15px] shrink-0" strokeWidth={isActive ? 2 : 1.75} />
               <span className="flex-1">{item.label}</span>
               {item.future ? (
-                <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-white/60">
+                <span className="rounded-full bg-surface-sunken px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary">
                   em breve
                 </span>
               ) : null}
@@ -60,8 +60,8 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 function Wordmark() {
   return (
-    <span className="mb-6 flex items-center px-2">
-      <Logo height={40} variant="dark" />
+    <span className="mb-6 flex items-center px-2 pt-1">
+      <Logo height={34} />
     </span>
   );
 }
@@ -83,7 +83,7 @@ export function AppChrome({
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface">
-      <aside className="hidden h-full w-60 shrink-0 flex-col bg-[var(--navy)] px-3 py-5 md:flex">
+      <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-border-subtle bg-surface px-3 py-5 md:flex">
         <Wordmark />
         <NavLinks />
       </aside>
@@ -91,7 +91,7 @@ export function AppChrome({
       <DialogPrimitive.Root open={mobileOpen} onOpenChange={setMobileOpen}>
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(10,13,17,0.5)] md:hidden" />
-          <DialogPrimitive.Content className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[var(--navy)] px-3 py-5 md:hidden">
+          <DialogPrimitive.Content className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border-subtle bg-surface px-3 py-5 md:hidden">
             <DialogPrimitive.Title className="sr-only">Menu de navegação</DialogPrimitive.Title>
             <Wordmark />
             <NavLinks onNavigate={() => setMobileOpen(false)} />

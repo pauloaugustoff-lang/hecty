@@ -35,7 +35,7 @@ export default async function CategoriasPage() {
           return (
             <section key={kind}>
               <h2 className="mb-3 font-display text-base font-medium text-text-primary">{KIND_LABELS[kind]}</h2>
-              <div className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle">
+              <div className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
                 {kindCategories.map((category) => (
                   <div key={category.id} className={category.is_archived ? "opacity-60" : ""}>
                     <div className="flex items-center justify-between px-4 py-2.5">
