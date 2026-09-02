@@ -26,6 +26,13 @@ export type TransactionSortDir = "asc" | "desc";
 export interface TransactionFilters {
   from?: string;
   to?: string;
+  /**
+   * Campo de data que from/to (e a ordenação por data) usam:
+   * "movement" (padrão) = data da compra; "competence" = mês da fatura em
+   * que a compra cai (para conta, competence = movement, então o modo
+   * competência mostra "o que sai do caixa no período", igual à Visão Geral).
+   */
+  dateField?: "movement" | "competence";
   accountId?: string;
   cardId?: string;
   categoryId?: string;
@@ -70,6 +77,7 @@ export async function listTransactions(
     .is("deleted_at", null);
 
   const ascending = filters.sortDir === "asc";
+  const dateColumn = filters.dateField === "competence" ? "competence_date" : "movement_date";
   switch (filters.sortBy) {
     case "value":
       query = query.order("amount_cents", { ascending });
@@ -90,13 +98,13 @@ export async function listTransactions(
       break;
     case "date":
     default:
-      query = query.order("movement_date", { ascending });
+      query = query.order(dateColumn, { ascending });
       break;
   }
   query = query.order("created_at", { ascending: false });
 
-  if (filters.from) query = query.gte("movement_date", filters.from);
-  if (filters.to) query = query.lte("movement_date", filters.to);
+  if (filters.from) query = query.gte(dateColumn, filters.from);
+  if (filters.to) query = query.lte(dateColumn, filters.to);
   if (filters.accountId) query = query.eq("account_id", filters.accountId);
   if (filters.cardId) query = query.eq("card_id", filters.cardId);
   if (filters.subcategoryId) query = query.eq("subcategory_id", filters.subcategoryId);

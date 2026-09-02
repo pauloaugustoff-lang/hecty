@@ -37,6 +37,7 @@ export default async function TransacoesPage({
     listTransactions(space.id, {
       from: params.from,
       to: params.to,
+      dateField: params.dateField === "competence" ? "competence" : "movement",
       accountId: params.accountId,
       cardId: params.cardId,
       categoryId: params.categoryId,

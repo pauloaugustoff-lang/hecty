@@ -99,6 +99,18 @@ export function TransactionFilters({
         onChange={(e) => updateParam("search", e.target.value)}
         className="w-56"
       />
+      <Select
+        value={searchParams.get("dateField") === "competence" ? "competence" : "movement"}
+        onValueChange={(v) => updateParam("dateField", v === "movement" ? "" : v)}
+      >
+        <SelectTrigger className="w-44" aria-label="Campo de data do filtro">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="movement">Por data da compra</SelectItem>
+          <SelectItem value="competence">Por fatura (competência)</SelectItem>
+        </SelectContent>
+      </Select>
       <div className="flex items-center gap-1 rounded-[var(--radius-md)] border border-border px-1 py-1">
         <Button
           type="button"
