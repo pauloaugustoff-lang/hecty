@@ -5,6 +5,7 @@ import { listRules } from "@/lib/data/rules";
 import { listAccounts } from "@/lib/data/accounts";
 import { listCards } from "@/lib/data/cards";
 import { listCategories } from "@/lib/data/categories";
+import { listTags } from "@/lib/data/tags";
 import { natureLabels } from "@/lib/domain/labels";
 import { formatCentsToBRL } from "@/lib/money/money";
 import { PageHeader } from "@/components/layout/page-header";
@@ -31,11 +32,12 @@ export default async function RegrasPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [rules, accounts, cards, categories] = await Promise.all([
+  const [rules, accounts, cards, categories, tags] = await Promise.all([
     listRules(space.id),
     listAccounts(space.id),
     listCards(space.id),
     listCategories(space.id),
+    listTags(space.id),
   ]);
 
   const categoryName = (id: string | null) => categories.find((c) => c.id === id)?.name;
@@ -45,7 +47,7 @@ export default async function RegrasPage() {
       <PageHeader
         title="Regras automáticas"
         description="Classificam novos lançamentos automaticamente com base na descrição, conta, cartão e valor. A primeira regra que casar, por prioridade, é aplicada."
-        actions={<RuleFormDialog spaceId={space.id} userId={user.id} accounts={accounts} cards={cards} categories={categories} />}
+        actions={<RuleFormDialog spaceId={space.id} userId={user.id} accounts={accounts} cards={cards} categories={categories} tags={tags} />}
       />
 
       {rules.length === 0 ? (
@@ -53,7 +55,7 @@ export default async function RegrasPage() {
           icon={Workflow}
           title="Nenhuma regra criada"
           description='Ex.: descrição contém "CEMIG" → Despesa &gt; Moradia &gt; Energia elétrica.'
-          action={<RuleFormDialog spaceId={space.id} userId={user.id} accounts={accounts} cards={cards} categories={categories} />}
+          action={<RuleFormDialog spaceId={space.id} userId={user.id} accounts={accounts} cards={cards} categories={categories} tags={tags} />}
         />
       ) : (
         <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised">
@@ -87,6 +89,7 @@ export default async function RegrasPage() {
                   <Td className="text-[13px] text-text-secondary">
                     {rule.action_nature ? natureLabels[rule.action_nature] : "—"}
                     {categoryName(rule.action_category_id) ? ` · ${categoryName(rule.action_category_id)}` : ""}
+                    {rule.action_tags?.length ? ` · ${rule.action_tags.map((t) => `#${t}`).join(" ")}` : ""}
                   </Td>
                   <Td className="tabular text-text-secondary">{rule.times_applied}x</Td>
                   <Td>
@@ -94,7 +97,7 @@ export default async function RegrasPage() {
                   </Td>
                   <Td>
                     <div className="flex justify-end gap-1">
-                      <RuleFormDialog spaceId={space.id} userId={user.id} accounts={accounts} cards={cards} categories={categories} rule={rule} />
+                      <RuleFormDialog spaceId={space.id} userId={user.id} accounts={accounts} cards={cards} categories={categories} tags={tags} rule={rule} />
                       <DeleteRuleButton ruleId={rule.id} />
                     </div>
                   </Td>

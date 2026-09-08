@@ -225,10 +225,11 @@ export async function applyRulesToUnclassifiedAction(spaceId: string): Promise<B
       direction: "entrada" | "saida";
       account_id: string | null;
       card_id: string | null;
+      tags: string[] | null;
     }>((pageFrom, pageTo) =>
       supabase
         .from("transactions")
-        .select("id, original_description, amount_cents, direction, account_id, card_id")
+        .select("id, original_description, amount_cents, direction, account_id, card_id, tags")
         .eq("space_id", spaceId)
         .is("deleted_at", null)
         .neq("classification_status", "classificado")
@@ -250,7 +251,11 @@ export async function applyRulesToUnclassifiedAction(spaceId: string): Promise<B
   // agrupa por regra e faz um UPDATE em lote por grupo — antes era um UPDATE
   // sequencial POR lançamento (centenas de round trips, estourando o timeout
   // da Server Action em espaços grandes e deixando a varredura pela metade).
-  const groups = new Map<string, { ruleId: string; action: ReturnType<typeof actionFromRule>; ids: string[] }>();
+  // Tags da regra são SOMADAS às que o lançamento já tem (nunca apagam uma
+  // marcação manual). Como o resultado varia por linha, a chave do grupo
+  // inclui o conjunto final de tags — no caso comum (regra sem tag, ou
+  // lançamentos ainda sem tag) continua sendo um único UPDATE por regra.
+  const groups = new Map<string, { ruleId: string; action: ReturnType<typeof actionFromRule>; tags?: string[]; ids: string[] }>();
   for (const tx of transactions) {
     const match = findMatchingRule(ruleDefs, {
       description: tx.original_description,
@@ -261,9 +266,13 @@ export async function applyRulesToUnclassifiedAction(spaceId: string): Promise<B
     });
     if (!match) continue;
 
-    const group = groups.get(match.id) ?? { ruleId: match.id, action: actionFromRule(match), ids: [] };
+    const action = actionFromRule(match);
+    const mergedTags = action.tags?.length ? Array.from(new Set([...(tx.tags ?? []), ...action.tags])) : undefined;
+    const key = mergedTags ? `${match.id}|${mergedTags.join(" ")}` : match.id;
+
+    const group = groups.get(key) ?? { ruleId: match.id, action, tags: mergedTags, ids: [] };
     group.ids.push(tx.id);
-    groups.set(match.id, group);
+    groups.set(key, group);
   }
 
   let updated = 0;
@@ -280,6 +289,7 @@ export async function applyRulesToUnclassifiedAction(spaceId: string): Promise<B
           category_id: group.action.categoryId ?? null,
           subcategory_id: group.action.subcategoryId ?? null,
           counterparty: group.action.counterparty ?? undefined,
+          tags: group.tags,
           // Regra sem natureza (só categoria) ou com natureza que exige mais
           // etapas não deve marcar como classificado — antes o valor fixo
           // tirava esses lançamentos da fila de revisão indevidamente.

@@ -251,6 +251,18 @@ export async function confirmImportBatchAction(
   );
   if (rows.length === 0) return { error: "Não foi possível carregar as linhas do lote." };
 
+  // As linhas do lote só guardam a regra que sugeriu (suggested_by_rule_id),
+  // não as tags dela — busca-se aqui o action_tags das regras envolvidas pra
+  // gravar as tags junto com o lançamento, sem precisar de coluna nova.
+  const ruleIds = Array.from(new Set(rows.map((r) => r.suggested_by_rule_id).filter((id): id is string => Boolean(id))));
+  const tagsByRule = new Map<string, string[]>();
+  if (ruleIds.length > 0) {
+    const { data: rulesWithTags } = await supabase.from("rules").select("id, action_tags").in("id", ruleIds);
+    for (const r of rulesWithTags ?? []) {
+      if (r.action_tags?.length) tagsByRule.set(r.id, r.action_tags);
+    }
+  }
+
   const selectedIds = new Set(selectedRowIds);
   const toImport = rows.filter((r) => selectedIds.has(r.id) && r.movement_date && r.amount_cents !== null && r.direction);
   const toIgnore = rows.filter((r) => !selectedIds.has(r.id));
@@ -296,6 +308,7 @@ export async function confirmImportBatchAction(
         Boolean(row.suggested_category_id),
       ),
       classified_by_rule_id: row.suggested_by_rule_id,
+      tags: (row.suggested_by_rule_id && tagsByRule.get(row.suggested_by_rule_id)) || [],
       installment_number: installmentNumber,
       installment_total: installmentTotal,
       installment_group_id: installmentGroupId,

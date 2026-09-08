@@ -36,10 +36,17 @@ function parseRuleFormData(formData: FormData) {
     actionCategoryId: str("actionCategoryId"),
     actionSubcategoryId: str("actionSubcategoryId"),
     actionCounterparty: str("actionCounterparty"),
+    actionTags: formData.getAll("actionTags").map(String),
     actionNotes: str("actionNotes"),
     actionMarkTransfer: formData.get("actionMarkTransfer") === "true",
     actionMarkRedemption: formData.get("actionMarkRedemption") === "true",
   });
+}
+
+// Lista vazia vira null: "sem tag" fica inequívoco no banco e o motor
+// (actionFromRule) já trata null como "não mexer nas tags".
+function actionTagsOrNull(tags: string[] | null | undefined): string[] | null {
+  return tags && tags.length > 0 ? tags : null;
 }
 
 export async function createRuleAction(
@@ -70,6 +77,7 @@ export async function createRuleAction(
     action_category_id: parsed.data.actionCategoryId,
     action_subcategory_id: parsed.data.actionSubcategoryId,
     action_counterparty: parsed.data.actionCounterparty,
+    action_tags: actionTagsOrNull(parsed.data.actionTags),
     action_notes: parsed.data.actionNotes,
     action_mark_transfer: parsed.data.actionMarkTransfer,
     action_mark_redemption: parsed.data.actionMarkRedemption,
@@ -112,6 +120,7 @@ export async function updateRuleAction(
       action_category_id: parsed.data.actionCategoryId,
       action_subcategory_id: parsed.data.actionSubcategoryId,
       action_counterparty: parsed.data.actionCounterparty,
+      action_tags: actionTagsOrNull(parsed.data.actionTags),
       action_notes: parsed.data.actionNotes,
       action_mark_transfer: parsed.data.actionMarkTransfer,
       action_mark_redemption: parsed.data.actionMarkRedemption,

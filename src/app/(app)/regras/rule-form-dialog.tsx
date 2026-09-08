@@ -1,14 +1,16 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useState, useTransition, type KeyboardEvent } from "react";
-import { Plus, Pencil, X } from "lucide-react";
+import { Plus, Pencil, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { createRuleAction, updateRuleAction, type ActionState } from "./actions";
 import { createCategoryAction } from "../configuracoes/categorias/actions";
+import { createTagAction } from "../transacoes/actions";
 import type { RuleRow } from "@/lib/data/rules";
 import type { AccountRow } from "@/lib/data/accounts";
 import type { CardRow } from "@/lib/data/cards";
 import type { CategoryRow } from "@/lib/data/categories";
+import type { TagRow } from "@/lib/data/tags";
 import type { TransactionNature, RuleMatchType, TransactionDirection, CategoryKind } from "@/lib/supabase/types";
 import { natureLabels, categoryKindForNature } from "@/lib/domain/labels";
 import { sortByName, sortEntriesByLabel } from "@/lib/utils/sort";
@@ -56,6 +58,7 @@ export function RuleFormDialog({
   accounts,
   cards,
   categories,
+  tags,
   rule,
 }: {
   spaceId: string;
@@ -63,6 +66,7 @@ export function RuleFormDialog({
   accounts: AccountRow[];
   cards: CardRow[];
   categories: CategoryRow[];
+  tags: TagRow[];
   rule?: RuleRow;
 }) {
   const isEdit = Boolean(rule);
@@ -96,6 +100,39 @@ export function RuleFormDialog({
   const [newSubcategoryName, setNewSubcategoryName] = useState("");
   const [newSubcategoryColor, setNewSubcategoryColor] = useState(CATEGORY_COLORS[0]);
   const [isCreatingCategory, startCreateCategoryTransition] = useTransition();
+
+  // Tags: mesmo picker do lançamento — a regra guarda nomes (rules.action_tags,
+  // text[]) e, ao casar, eles são somados a transactions.tags sem apagar os
+  // que o usuário já tiver marcado à mão.
+  const [localTags, setLocalTags] = useState<TagRow[]>(tags);
+  const [selectedTagNames, setSelectedTagNames] = useState<string[]>(rule?.action_tags ?? []);
+  const [tagSearch, setTagSearch] = useState("");
+  const [isCreatingTag, startCreateTagTransition] = useTransition();
+  const tagResults = useMemo(() => {
+    const query = tagSearch.trim().toLowerCase();
+    if (!query) return [];
+    return sortByName(localTags.filter((t) => !selectedTagNames.includes(t.name) && t.name.toLowerCase().includes(query)));
+  }, [localTags, tagSearch, selectedTagNames]);
+  const hasExactTagMatch = localTags.some((t) => t.name.toLowerCase() === tagSearch.trim().toLowerCase());
+
+  function handleCreateTag() {
+    const name = tagSearch.trim();
+    if (!name || hasExactTagMatch) return;
+    const fd = new FormData();
+    fd.set("name", name);
+    fd.set("color", CATEGORY_COLORS[localTags.length % CATEGORY_COLORS.length]);
+    startCreateTagTransition(async () => {
+      const result = await createTagAction(spaceId, {}, fd);
+      if (result.error || !result.tag) {
+        toast.error(result.error ?? "Não foi possível criar a tag.");
+        return;
+      }
+      setLocalTags((prev) => [...prev, result.tag!]);
+      setSelectedTagNames((prev) => [...prev, result.tag!.name]);
+      setTagSearch("");
+      toast.success("Tag criada");
+    });
+  }
 
   // Mesmo filtro de compatibilidade natureza→tipo de categoria dos diálogos
   // de classificação — este era o único que ainda oferecia todas as
@@ -235,6 +272,9 @@ export function RuleFormDialog({
           <input type="hidden" name="actionMarkRedemption" value={String(markRedemption)} />
           <input type="hidden" name="minAmountCents" value={safeCents(minInput) ?? ""} />
           <input type="hidden" name="maxAmountCents" value={safeCents(maxInput) ?? ""} />
+          {selectedTagNames.map((t) => (
+            <input key={t} type="hidden" name="actionTags" value={t} />
+          ))}
 
           <div className="flex items-center justify-between">
             <div className="flex-1">
@@ -513,6 +553,73 @@ export function RuleFormDialog({
               ) : null}
 
               <Input name="actionCounterparty" defaultValue={rule?.action_counterparty ?? ""} placeholder="Estabelecimento (opcional)" className="col-span-2" />
+
+              <div className="col-span-2">
+                <Label className="!mb-1">Tags (opcional)</Label>
+                {selectedTagNames.length > 0 ? (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {selectedTagNames.map((name) => {
+                      const color = localTags.find((t) => t.name === name)?.color ?? "#94a3b8";
+                      return (
+                        <span
+                          key={name}
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px]"
+                          style={{ backgroundColor: `${color}26`, color }}
+                        >
+                          {name}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTagNames((prev) => prev.filter((n) => n !== name))}
+                            aria-label={`Remover tag ${name}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
+                  <Input
+                    value={tagSearch}
+                    onChange={(e) => setTagSearch(e.target.value)}
+                    placeholder="Buscar ou criar uma tag…"
+                    className="pl-8"
+                  />
+                </div>
+                {tagSearch.trim() ? (
+                  <div className="relative">
+                    <div className="absolute z-10 mt-1 w-full rounded-[var(--radius-md)] border border-border bg-surface-overlay shadow-[var(--shadow-md)]">
+                      {tagResults.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTagNames((prev) => [...prev, t.name]);
+                            setTagSearch("");
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-surface-sunken"
+                        >
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+                          {t.name}
+                        </button>
+                      ))}
+                      {!hasExactTagMatch ? (
+                        <button
+                          type="button"
+                          onClick={handleCreateTag}
+                          disabled={isCreatingTag}
+                          className="flex w-full items-center gap-1 border-t border-border-subtle px-3 py-2 text-left text-[13px] text-accent hover:bg-surface-sunken"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          {isCreatingTag ? "Criando…" : `Criar tag "${tagSearch.trim()}"`}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div className="mt-3 flex gap-4">
               <label className="flex items-center gap-2 text-[13px] text-text-secondary">
