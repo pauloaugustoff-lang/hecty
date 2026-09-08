@@ -175,6 +175,15 @@ export const investmentAssetFormSchema = z
     institution: z.string().trim().max(80).default(""),
     notes: z.string().trim().max(1000).default(""),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Cor inválida."),
+
+    // Aporte inicial informado junto com o cadastro. Quem cadastra um CDB já
+    // sabe quanto aplicou; obrigar um segundo passo só para lançar isso é
+    // burocracia. Só é aceito enquanto o ativo não tem nenhum movimento, o que
+    // torna impossível duplicar o aporte ao editar.
+    initialAmountCents: z.number().int().nonnegative().nullable().optional(),
+    initialQuantity: z.number().nonnegative().nullable().optional(),
+    initialUnitPriceCents: z.number().int().nonnegative().nullable().optional(),
+    initialDate: z.string().date().nullable().optional(),
   })
   // Espelham os CHECK do banco: melhor recusar no formulário, com uma frase
   // que explica o que falta, do que devolver o erro cru do Postgres.

@@ -47,10 +47,13 @@ export function AssetFormDialog({
   spaceId,
   accounts,
   asset,
+  movementCount = 0,
 }: {
   spaceId: string;
   accounts: AccountRow[];
   asset?: InvestmentAssetRow;
+  /** Quantos movimentos o ativo já tem — decide se ainda cabe pedir o aporte inicial. */
+  movementCount?: number;
 }) {
   const isEdit = Boolean(asset);
   const [open, setOpen] = useState(false);
@@ -70,6 +73,14 @@ export function AssetFormDialog({
   const [manualValueInput, setManualValueInput] = useState(
     centsToInput(asset?.manual_value_cents ?? null, asset?.currency ?? "BRL"),
   );
+
+  // Aporte inicial: quem cadastra um CDB já sabe quanto aplicou, e obrigar um
+  // segundo passo só para lançar isso é burocracia. O bloco desaparece assim
+  // que o ativo tem qualquer movimento, então nunca dá para duplicar o aporte.
+  const showInitialContribution = !isEdit || movementCount === 0;
+  const [initialAmountInput, setInitialAmountInput] = useState("");
+  const [initialQuantityInput, setInitialQuantityInput] = useState("");
+  const [initialUnitPriceInput, setInitialUnitPriceInput] = useState("");
 
   const [quotePreview, setQuotePreview] = useState<string | null>(null);
   const [isCheckingQuote, startQuoteCheck] = useTransition();
@@ -110,6 +121,29 @@ export function AssetFormDialog({
 
   const resolvedSymbol = resolveQuoteSymbol({ asset_class: assetClass, ticker, quote_symbol: quoteSymbol });
 
+  function toCents(input: string): number | null {
+    if (!input.trim()) return null;
+    try {
+      return parseToCents(input, currency);
+    } catch {
+      return null;
+    }
+  }
+
+  function toNumber(input: string): number | null {
+    if (!input.trim()) return null;
+    const value = Number(input.replace(/\s/g, "").replace(",", "."));
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const initialQuantity = toNumber(initialQuantityInput);
+  const initialUnitPriceCents = toCents(initialUnitPriceInput);
+  // Em papel cotado o valor sai de quantidade x preço, e o servidor faz essa
+  // conta — mandar o total daqui só abriria espaço para os dois divergirem.
+  const initialAmountCents = pricingMode === "cotacao" ? null : toCents(initialAmountInput);
+  const derivedInitialAmount =
+    initialQuantity && initialUnitPriceCents ? Math.round(initialQuantity * initialUnitPriceCents) : null;
+
   let manualValueCents: number | null = null;
   if (manualValueInput) {
     try {
@@ -136,7 +170,7 @@ export function AssetFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "Editar ativo" : "Novo ativo"}</DialogTitle>
           <DialogDescription>
-            Cadastre o papel uma vez; depois é só lançar aportes, resgates e proventos nele.
+            O cadastro já aceita o valor aplicado. Resgates, proventos e novos aportes entram depois, em Movimentos.
           </DialogDescription>
         </DialogHeader>
 
@@ -155,6 +189,13 @@ export function AssetFormDialog({
           <input type="hidden" name="color" value={color} />
           {pricingMode === "manual" ? (
             <input type="hidden" name="manualValueCents" value={manualValueCents ?? ""} />
+          ) : null}
+          {showInitialContribution ? (
+            <>
+              <input type="hidden" name="initialAmountCents" value={initialAmountCents ?? ""} />
+              <input type="hidden" name="initialQuantity" value={initialQuantity ?? ""} />
+              <input type="hidden" name="initialUnitPriceCents" value={initialUnitPriceCents ?? ""} />
+            </>
           ) : null}
 
           <div className="grid grid-cols-2 gap-3">
@@ -364,6 +405,72 @@ export function AssetFormDialog({
                   />
                 </div>
               </>
+            ) : null}
+
+            {showInitialContribution ? (
+              <div className="col-span-2 space-y-3 rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-3">
+                <p className="text-[13px] font-medium text-text-primary">
+                  {pricingMode === "indexado" ? "Valor aplicado" : "Aporte inicial"}
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {pricingMode === "cotacao" ? (
+                    <>
+                      <div>
+                        <Label htmlFor="asset-initial-quantity">Quantidade</Label>
+                        <Input
+                          id="asset-initial-quantity"
+                          inputMode="decimal"
+                          value={initialQuantityInput}
+                          onChange={(e) => setInitialQuantityInput(e.target.value)}
+                          placeholder="100"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="asset-initial-price">Preço pago ({currency})</Label>
+                        <Input
+                          id="asset-initial-price"
+                          inputMode="decimal"
+                          value={initialUnitPriceInput}
+                          onChange={(e) => setInitialUnitPriceInput(e.target.value)}
+                          placeholder="0,00"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <Label htmlFor="asset-initial-amount">Valor ({currency})</Label>
+                      <Input
+                        id="asset-initial-amount"
+                        inputMode="decimal"
+                        value={initialAmountInput}
+                        onChange={(e) => setInitialAmountInput(e.target.value)}
+                        placeholder="0,00"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <Label htmlFor="asset-initial-date">Data</Label>
+                    <Input
+                      id="asset-initial-date"
+                      name="initialDate"
+                      type="date"
+                      defaultValue={pricingMode === "indexado" ? "" : new Date().toISOString().slice(0, 10)}
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-text-tertiary">
+                  {derivedInitialAmount
+                    ? `Total: ${formatCents(derivedInitialAmount, currency)}. `
+                    : ""}
+                  Isso lança o primeiro aporte do ativo.
+                  {pricingMode === "indexado" ? " Sem data, vale a data de aplicação acima." : ""} Só o investimento é
+                  registrado — se esse dinheiro já saiu da sua conta e está no extrato, vincule o lançamento pela
+                  carteira em vez de lançá-lo de novo.
+                </p>
+              </div>
             ) : null}
 
             <div>

@@ -64,6 +64,10 @@ function parseAssetFormData(formData: FormData) {
     isTaxExempt: formData.get("isTaxExempt") === "on" || formData.get("isTaxExempt") === "true",
     manualValueCents: optionalNumber(formData, "manualValueCents"),
     manualValueDate: optionalString(formData, "manualValueDate"),
+    initialAmountCents: optionalNumber(formData, "initialAmountCents"),
+    initialQuantity: optionalNumber(formData, "initialQuantity"),
+    initialUnitPriceCents: optionalNumber(formData, "initialUnitPriceCents"),
+    initialDate: optionalString(formData, "initialDate"),
     accountId: optionalString(formData, "accountId"),
     institution: formData.get("institution") ?? "",
     notes: formData.get("notes") ?? "",
@@ -104,6 +108,51 @@ function assetColumnsFor(data: InvestmentAssetFormInput) {
   };
 }
 
+/**
+ * Grava o aporte que veio junto com o cadastro do ativo.
+ *
+ * A trava é contar os movimentos antes: o bloco só existe na tela enquanto o
+ * ativo não tem nenhum, e conferir aqui de novo garante que reenviar o
+ * formulário (dois cliques, voltar do navegador, editar depois) não crie um
+ * segundo aporte por cima do primeiro.
+ */
+async function saveInitialContribution(
+  spaceId: string,
+  assetId: string,
+  data: InvestmentAssetFormInput,
+): Promise<void> {
+  const quantity = data.initialQuantity ?? 0;
+  const unitPrice = data.initialUnitPriceCents ?? 0;
+  const amount = data.initialAmountCents ?? (quantity > 0 && unitPrice > 0 ? Math.round(quantity * unitPrice) : 0);
+  if (amount <= 0 && quantity <= 0) return;
+
+  const supabase = await createClient();
+
+  const { count } = await supabase
+    .from("investment_movements")
+    .select("id", { count: "exact", head: true })
+    .eq("asset_id", assetId)
+    .eq("space_id", spaceId);
+  if ((count ?? 0) > 0) return;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  await supabase.from("investment_movements").insert({
+    space_id: spaceId,
+    asset_id: assetId,
+    movement_type: "aporte",
+    // Para renda fixa a data da aplicação É a data do aporte; não faz sentido
+    // pedir a mesma data duas vezes na mesma tela.
+    movement_date: data.initialDate ?? data.issueDate ?? new Date().toISOString().slice(0, 10),
+    quantity,
+    unit_price_cents: unitPrice > 0 ? unitPrice : null,
+    amount_cents: amount,
+    created_by: user?.id ?? null,
+  });
+}
+
 export async function createAssetAction(spaceId: string, _prev: ActionState, formData: FormData): Promise<ActionState> {
   const parsed = parseAssetFormData(formData);
   if (!parsed.success) {
@@ -111,11 +160,15 @@ export async function createAssetAction(spaceId: string, _prev: ActionState, for
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: created, error } = await supabase
     .from("investment_assets")
-    .insert({ space_id: spaceId, ...assetColumnsFor(parsed.data) });
+    .insert({ space_id: spaceId, ...assetColumnsFor(parsed.data) })
+    .select("id")
+    .single();
 
-  if (error) return { error: "Não foi possível criar o ativo." };
+  if (error || !created) return { error: "Não foi possível criar o ativo." };
+
+  await saveInitialContribution(spaceId, created.id, parsed.data);
 
   revalidateInvestmentData();
   return { success: true };
@@ -140,6 +193,8 @@ export async function updateAssetAction(
     .eq("space_id", spaceId);
 
   if (error) return { error: "Não foi possível salvar as alterações." };
+
+  await saveInitialContribution(spaceId, assetId, parsed.data);
 
   revalidateInvestmentData();
   return { success: true };

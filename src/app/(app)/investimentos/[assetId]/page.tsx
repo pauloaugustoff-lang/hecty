@@ -87,7 +87,7 @@ export default async function AssetPage({ params }: { params: Promise<{ assetId:
               accounts={accounts}
               defaultAssetId={asset.id}
             />
-            <AssetFormDialog spaceId={space.id} accounts={accounts} asset={asset} />
+            <AssetFormDialog spaceId={space.id} accounts={accounts} asset={asset} movementCount={movements.length} />
           </>
         }
       />
