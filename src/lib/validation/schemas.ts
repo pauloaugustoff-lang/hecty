@@ -124,6 +124,103 @@ export const ruleFormSchema = z.object({
 });
 export type RuleFormInput = z.infer<typeof ruleFormSchema>;
 
+export const assetClassSchema = z.enum([
+  "acao",
+  "fii",
+  "etf",
+  "bdr",
+  "stock",
+  "reit",
+  "fundo",
+  "tesouro_direto",
+  "cdb",
+  "lci_lca",
+  "cri_cra",
+  "debenture",
+  "poupanca",
+  "previdencia",
+  "cripto",
+  "outro",
+]);
+export const assetPricingModeSchema = z.enum(["cotacao", "indexado", "manual"]);
+export const investmentIndexSchema = z.enum(["prefixado", "cdi", "ipca", "selic", "poupanca"]);
+export const investmentMovementTypeSchema = z.enum([
+  "aporte",
+  "resgate",
+  "provento",
+  "bonificacao",
+  "desdobramento",
+  "taxa",
+  "imposto",
+  "ajuste",
+]);
+
+export const investmentAssetFormSchema = z
+  .object({
+    name: z.string().trim().min(1, "Informe um nome para o ativo.").max(120),
+    assetClass: assetClassSchema,
+    pricingMode: assetPricingModeSchema,
+    currency: z.string().length(3).default("BRL"),
+    ticker: z.string().trim().max(20).nullable().optional(),
+    quoteSymbol: z.string().trim().max(30).nullable().optional(),
+    rateIndex: investmentIndexSchema.nullable().optional(),
+    ratePercent: z.number().nonnegative().max(1000).nullable().optional(),
+    rateSpread: z.number().min(-100).max(1000).nullable().optional(),
+    issueDate: z.string().date().nullable().optional(),
+    maturityDate: z.string().date().nullable().optional(),
+    isTaxExempt: z.boolean().default(false),
+    manualValueCents: z.number().int().nonnegative().nullable().optional(),
+    manualValueDate: z.string().date().nullable().optional(),
+    accountId: z.string().uuid().nullable().optional(),
+    institution: z.string().trim().max(80).default(""),
+    notes: z.string().trim().max(1000).default(""),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Cor inválida."),
+  })
+  // Espelham os CHECK do banco: melhor recusar no formulário, com uma frase
+  // que explica o que falta, do que devolver o erro cru do Postgres.
+  .refine((data) => data.pricingMode !== "cotacao" || Boolean(data.quoteSymbol || data.ticker), {
+    message: "Informe o ticker do ativo para buscar a cotação.",
+    path: ["ticker"],
+  })
+  .refine((data) => data.pricingMode !== "indexado" || Boolean(data.rateIndex), {
+    message: "Escolha o índice que remunera o papel.",
+    path: ["rateIndex"],
+  })
+  .refine(
+    (data) =>
+      data.pricingMode !== "indexado" ||
+      data.rateIndex !== "prefixado" ||
+      (data.rateSpread !== null && data.rateSpread !== undefined),
+    { message: "Informe a taxa anual do papel prefixado.", path: ["rateSpread"] },
+  );
+export type InvestmentAssetFormInput = z.infer<typeof investmentAssetFormSchema>;
+
+export const investmentMovementFormSchema = z
+  .object({
+    assetId: z.string().uuid(),
+    movementType: investmentMovementTypeSchema,
+    movementDate: z.string().date(),
+    quantity: z.number().nonnegative().default(0),
+    unitPriceCents: z.number().int().nonnegative().nullable().optional(),
+    amountCents: z.number().int().nonnegative().default(0),
+    feesCents: z.number().int().nonnegative().default(0),
+    taxCents: z.number().int().nonnegative().default(0),
+    splitFactor: z.number().positive().nullable().optional(),
+    transactionId: z.string().uuid().nullable().optional(),
+    notes: z.string().trim().max(500).default(""),
+    /** Cria também o lançamento na conta indicada, para o movimento aparecer no extrato. */
+    createTransactionAccountId: z.string().uuid().nullable().optional(),
+  })
+  .refine((data) => data.movementType !== "desdobramento" || Boolean(data.splitFactor), {
+    message: "Informe o fator do desdobramento (10 para um split 1:10).",
+    path: ["splitFactor"],
+  })
+  .refine((data) => data.movementType === "desdobramento" || data.amountCents > 0 || data.quantity > 0, {
+    message: "Informe o valor ou a quantidade do movimento.",
+    path: ["amountCents"],
+  });
+export type InvestmentMovementFormInput = z.infer<typeof investmentMovementFormSchema>;
+
 export const spaceFormSchema = z.object({
   name: z.string().trim().min(1, "Informe um nome para o espaço.").max(80),
   type: z.enum(["individual", "compartilhado"]),

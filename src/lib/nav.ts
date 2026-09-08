@@ -30,6 +30,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/planejamento", label: "Planejamento", icon: Target },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/regras", label: "Regras automáticas", icon: Workflow },
-  { href: "/investimentos", label: "Investimentos", icon: TrendingUp, future: true },
+  { href: "/investimentos", label: "Investimentos", icon: TrendingUp },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];

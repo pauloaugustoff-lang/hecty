@@ -32,6 +32,36 @@ export type TransactionNature =
   | "ajuste"
   | "nao_classificado";
 
+export type AssetClass =
+  | "acao"
+  | "fii"
+  | "etf"
+  | "bdr"
+  | "stock"
+  | "reit"
+  | "fundo"
+  | "tesouro_direto"
+  | "cdb"
+  | "lci_lca"
+  | "cri_cra"
+  | "debenture"
+  | "poupanca"
+  | "previdencia"
+  | "cripto"
+  | "outro";
+
+export type AssetPricingMode = "cotacao" | "indexado" | "manual";
+export type InvestmentIndex = "prefixado" | "cdi" | "ipca" | "selic" | "poupanca";
+export type InvestmentMovementType =
+  | "aporte"
+  | "resgate"
+  | "provento"
+  | "bonificacao"
+  | "desdobramento"
+  | "taxa"
+  | "imposto"
+  | "ajuste";
+
 export type ImportSourceType = "csv" | "ofx" | "xlsx" | "pdf";
 export type ImportStatus = "pendente" | "processando" | "concluida" | "desfeita" | "erro";
 export type ImportRowStatus = "pendente" | "duplicata_possivel" | "duplicata_confirmada" | "importado" | "ignorado";
@@ -272,6 +302,67 @@ export type RuleRow = {
   updated_at: string;
 }
 
+export type InvestmentAssetRow = {
+  id: string;
+  space_id: string;
+  name: string;
+  asset_class: AssetClass;
+  pricing_mode: AssetPricingMode;
+  currency: string;
+  ticker: string | null;
+  quote_symbol: string | null;
+  rate_index: InvestmentIndex | null;
+  rate_percent: number | null;
+  rate_spread: number | null;
+  issue_date: string | null;
+  maturity_date: string | null;
+  is_tax_exempt: boolean;
+  manual_value_cents: number | null;
+  manual_value_date: string | null;
+  account_id: string | null;
+  institution: string;
+  notes: string;
+  color: string;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type InvestmentMovementRow = {
+  id: string;
+  space_id: string;
+  asset_id: string;
+  movement_type: InvestmentMovementType;
+  movement_date: string;
+  quantity: number;
+  unit_price_cents: number | null;
+  amount_cents: number;
+  fees_cents: number;
+  tax_cents: number;
+  split_factor: number | null;
+  transaction_id: string | null;
+  notes: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AssetQuoteRow = {
+  symbol: string;
+  quote_date: string;
+  close_cents: number;
+  currency: string;
+  source: string;
+  fetched_at: string;
+}
+
+export type IndexRateRow = {
+  index_code: InvestmentIndex;
+  reference_date: string;
+  rate_percent: number;
+  fetched_at: string;
+}
+
 export type BudgetRow = {
   id: string;
   space_id: string;
@@ -397,6 +488,35 @@ export type Database = {
         Row: RuleRow;
         Insert: Partial<RuleRow> & { space_id: string; name: string; match_values: string[]; created_by: string };
         Update: Partial<RuleRow>;
+        Relationships: [];
+      };
+      investment_assets: {
+        Row: InvestmentAssetRow;
+        Insert: Partial<InvestmentAssetRow> & { space_id: string; name: string };
+        Update: Partial<InvestmentAssetRow>;
+        Relationships: [];
+      };
+      investment_movements: {
+        Row: InvestmentMovementRow;
+        Insert: Partial<InvestmentMovementRow> & {
+          space_id: string;
+          asset_id: string;
+          movement_type: InvestmentMovementType;
+          movement_date: string;
+        };
+        Update: Partial<InvestmentMovementRow>;
+        Relationships: [];
+      };
+      asset_quotes: {
+        Row: AssetQuoteRow;
+        Insert: Partial<AssetQuoteRow> & { symbol: string; quote_date: string; close_cents: number };
+        Update: Partial<AssetQuoteRow>;
+        Relationships: [];
+      };
+      index_rates: {
+        Row: IndexRateRow;
+        Insert: Partial<IndexRateRow> & { index_code: InvestmentIndex; reference_date: string; rate_percent: number };
+        Update: Partial<IndexRateRow>;
         Relationships: [];
       };
       budgets: {
