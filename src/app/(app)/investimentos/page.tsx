@@ -16,6 +16,7 @@ import { AssetFormDialog } from "./asset-form-dialog";
 import { MovementFormDialog } from "./movement-form-dialog";
 import { RefreshMarketDataButton } from "./refresh-market-data-button";
 import { LinkTransactionDialog } from "./link-transaction-dialog";
+import { AutoRefreshQuotes } from "./auto-refresh-quotes";
 
 function formatQuantity(quantity: number): string {
   return quantity.toLocaleString("pt-BR", { maximumFractionDigits: 8 });
@@ -114,18 +115,21 @@ export default async function InvestimentosPage() {
 
           {portfolio.missingQuotes.length > 0 ? (
             <Callout tone="warning" title="Ativos sem cotação">
-              Ainda não há preço para {portfolio.missingQuotes.join(", ")}. Clique em “Atualizar cotações” — se o
-              símbolo continuar sem retorno, confira o ticker no cadastro do ativo ou passe a informar o saldo
-              manualmente. Enquanto isso, eles ficam fora do patrimônio somado.
+              Ainda não há preço para {portfolio.missingQuotes.join(", ")}. A busca roda sozinha ao abrir esta
+              página; se o símbolo continuar sem retorno, confira o ticker no cadastro do ativo ou passe a informar o
+              saldo manualmente. Enquanto isso, eles ficam fora do patrimônio somado.
             </Callout>
           ) : null}
 
-          {portfolio.oldestQuoteDate ? (
-            <p className="text-[12px] text-text-tertiary">
-              Cotação mais antiga em uso: {portfolio.oldestQuoteDate.split("-").reverse().join("/")}. Renda fixa é
-              estimativa calculada pelo índice, não marcação a mercado da corretora.
-            </p>
-          ) : null}
+          <div className="space-y-1">
+            <AutoRefreshQuotes spaceId={space.id} needsRefresh={portfolio.needsRefresh} />
+            {portfolio.oldestQuoteDate ? (
+              <p className="text-[12px] text-text-tertiary">
+                Cotação mais antiga em uso: {portfolio.oldestQuoteDate.split("-").reverse().join("/")}. Renda fixa é
+                estimativa calculada pelo índice, não marcação a mercado da corretora.
+              </p>
+            ) : null}
+          </div>
 
           {assetGroupOrder.map((group) => {
             const entries = portfolio.assets.filter((entry) => assetGroup(entry.asset.asset_class) === group);

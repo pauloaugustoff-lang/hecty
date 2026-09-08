@@ -21,6 +21,8 @@ export interface CachedQuote {
   closeCents: number;
   quoteDate: string;
   currency: string;
+  /** Quando este preço foi buscado — é o que define se o cache está velho. */
+  fetchedAt: string;
 }
 
 function daysAgo(days: number): string {
@@ -41,7 +43,7 @@ export async function loadLatestQuotes(symbols: string[]): Promise<Map<string, C
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("asset_quotes")
-    .select("symbol, quote_date, close_cents, currency")
+    .select("symbol, quote_date, close_cents, currency, fetched_at")
     .in("symbol", Array.from(new Set(symbols)))
     .gte("quote_date", daysAgo(QUOTE_LOOKBACK_DAYS))
     .order("quote_date", { ascending: false });
@@ -50,12 +52,16 @@ export async function loadLatestQuotes(symbols: string[]): Promise<Map<string, C
 
   // Ordenado do mais recente para o mais antigo: a primeira linha de cada
   // símbolo já é a que vale.
-  for (const row of (data ?? []) as Pick<AssetQuoteRow, "symbol" | "quote_date" | "close_cents" | "currency">[]) {
+  for (const row of (data ?? []) as Pick<
+    AssetQuoteRow,
+    "symbol" | "quote_date" | "close_cents" | "currency" | "fetched_at"
+  >[]) {
     if (latest.has(row.symbol)) continue;
     latest.set(row.symbol, {
       closeCents: row.close_cents,
       quoteDate: row.quote_date,
       currency: row.currency,
+      fetchedAt: row.fetched_at,
     });
   }
   return latest;

@@ -41,7 +41,19 @@ export interface Portfolio {
   missingQuotes: string[];
   /** Data do preço mais antigo em uso, para avisar que a carteira está defasada. */
   oldestQuoteDate: string | null;
+  /**
+   * Cache velho ou incompleto: a página abre com o que tem e dispara a busca
+   * em segundo plano. Falso quando nada aqui depende de dado externo.
+   */
+  needsRefresh: boolean;
 }
+
+/**
+ * Idade a partir da qual o preço em cache é considerado velho. Meia hora
+ * mantém a carteira viva durante o pregão sem transformar cada visita à
+ * página em uma rodada de chamadas ao provedor.
+ */
+const QUOTE_STALE_MINUTES = 30;
 
 export async function listAssets(
   spaceId: string,
@@ -231,11 +243,22 @@ export async function loadPortfolio(spaceId: string, options?: { includeArchived
     totalsByCurrency.set(currency, totals);
   }
 
+  // Só faz sentido buscar dado externo se algum ativo depende dele: uma
+  // carteira inteira em modo manual nunca deve chamar Yahoo nem BCB.
+  const dependsOnMarketData = assets.some((a) => a.pricing_mode === "cotacao" || a.pricing_mode === "indexado");
+  const staleBefore = Date.now() - QUOTE_STALE_MINUTES * 60_000;
+  const hasStaleQuote = Array.from(quotes.values()).some((q) => new Date(q.fetchedAt).getTime() < staleBefore);
+  // Série de índice vazia: nenhum papel indexado consegue ser avaliado ainda.
+  const missingIndexSeries =
+    assets.some((a) => a.pricing_mode === "indexado") && (series.get("cdi")?.businessDays.length ?? 0) === 0;
+
   return {
     assets: withPositions,
     totals: Array.from(totalsByCurrency.values()).sort((a, b) => b.marketValueCents - a.marketValueCents),
     missingQuotes: Array.from(missingQuotes),
     oldestQuoteDate,
+    needsRefresh:
+      dependsOnMarketData && (missingQuotes.size > 0 || hasStaleQuote || quotes.size === 0 || missingIndexSeries),
   };
 }
 

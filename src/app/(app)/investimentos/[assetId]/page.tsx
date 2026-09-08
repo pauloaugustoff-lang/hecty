@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils/cn";
 import { AssetFormDialog } from "../asset-form-dialog";
 import { MovementFormDialog } from "../movement-form-dialog";
 import { ArchiveAssetButton, DeleteAssetButton, DeleteMovementButton } from "../asset-row-actions";
+import { AutoRefreshQuotes } from "../auto-refresh-quotes";
 
 function formatQuantity(quantity: number): string {
   return quantity.toLocaleString("pt-BR", { maximumFractionDigits: 8 });
@@ -135,6 +136,10 @@ export default async function AssetPage({ params }: { params: Promise<{ assetId:
           />
         </div>
       ) : null}
+
+      <div className="mb-4">
+        <AutoRefreshQuotes spaceId={space.id} needsRefresh={portfolio.needsRefresh} />
+      </div>
 
       {asset.notes ? (
         <p className="mb-6 rounded-[var(--radius-md)] border border-border-subtle bg-surface-sunken/50 px-3.5 py-3 text-sm text-text-secondary">
