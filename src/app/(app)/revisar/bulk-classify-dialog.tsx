@@ -63,15 +63,12 @@ export function BulkClassifyDialog({
     [categories, categoryId],
   );
 
+  // Mesma regra do diálogo de lançamento: mudou a natureza, zera categoria e
+  // subcategoria, porque o significado da categoria depende da natureza.
   function changeNature(next: TransactionNature) {
-    const nextKind = categoryKindForNature(next, directionHint);
-    if (nextKind && categoryId) {
-      const current = categories.find((c) => c.id === categoryId);
-      if (current && current.kind !== nextKind) {
-        setCategoryId("");
-        setSubcategoryId("");
-      }
-    }
+    if (next === nature) return;
+    setCategoryId("");
+    setSubcategoryId("");
     setNature(next);
   }
 

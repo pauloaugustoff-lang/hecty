@@ -174,11 +174,14 @@ export function TransactionFormDialog({
   }, [localTags, tagSearch, selectedTagNames]);
   const hasExactTagMatch = localTags.some((t) => t.name.toLowerCase() === tagSearch.trim().toLowerCase());
 
+  // Trocar a natureza sempre zera categoria e subcategoria. A checagem antiga
+  // só limpava quando mudava o TIPO da categoria, então trocas dentro do mesmo
+  // tipo passavam batido — ex.: receita do trabalho → reembolso, que deixava um
+  // reembolso classificado como "Dividendos".
   function changeNature(next: TransactionNature) {
-    if (categoryKindForNature(next, direction) !== categoryKind) {
-      setCategoryId("");
-      setSubcategoryId("");
-    }
+    if (next === nature) return;
+    setCategoryId("");
+    setSubcategoryId("");
     setNature(next);
   }
 

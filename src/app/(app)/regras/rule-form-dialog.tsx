@@ -387,15 +387,12 @@ export function RuleFormDialog({
               <Select
                 value={actionNature || "none"}
                 onValueChange={(v) => {
+                  // Mesma regra dos diálogos de lançamento: mudou a natureza,
+                  // zera categoria e subcategoria.
                   const next = v === "none" ? "" : (v as TransactionNature);
-                  const nextKind = next ? categoryKindForNature(next, direction || undefined) : null;
-                  if (nextKind && categoryId) {
-                    const current = localCategories.find((c) => c.id === categoryId);
-                    if (current && current.kind !== nextKind) {
-                      setCategoryId("");
-                      setSubcategoryId("");
-                    }
-                  }
+                  if (next === actionNature) return;
+                  setCategoryId("");
+                  setSubcategoryId("");
                   setActionNature(next);
                 }}
               >

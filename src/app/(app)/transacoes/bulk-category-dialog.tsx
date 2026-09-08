@@ -88,15 +88,12 @@ export function BulkCategoryDialog({
     counterparty.trim().length > 0 ||
     notes.trim().length > 0;
 
+  // Mesma regra dos demais diálogos: mudou a natureza, a escolha de categoria
+  // volta ao neutro ("manter"), porque a categoria depende da natureza.
   function changeNature(next: TransactionNature | "") {
-    const nextKind = next ? categoryKindForNature(next) : null;
-    if (nextKind && hasRealCategory) {
-      const current = categories.find((c) => c.id === categoryChoice);
-      if (current && current.kind !== nextKind) {
-        setCategoryChoice(KEEP_CATEGORY);
-        setSubcategoryId("");
-      }
-    }
+    if (next === nature) return;
+    setCategoryChoice(KEEP_CATEGORY);
+    setSubcategoryId("");
     setNature(next);
   }
 
