@@ -69,8 +69,8 @@ export const getNonBrlAccountAndCardIds = cache(
   },
 );
 
-// Filtra e agrupa por competence_date, não movement_date: uma compra no
-// cartão conta como despesa/saída de caixa no mês em que a fatura vence
+// Por padrão filtra e agrupa por competence_date, não movement_date: uma
+// compra no cartão conta como despesa/saída de caixa no mês em que a fatura vence
 // (é quando o dinheiro efetivamente sai da conta), não no mês da compra.
 // Para qualquer lançamento não ligado a cartão, competence_date é sempre
 // igual a movement_date, então o comportamento não muda.
@@ -81,7 +81,13 @@ export const getNonBrlAccountAndCardIds = cache(
 // render; sem o cache eram 5 consultas pesadas idênticas por carregamento.
 // Exportado para o Planejamento (budgets.ts) reutilizar em vez de duplicar
 // o abatimento de reembolso e a exclusão de moedas não-BRL.
-export const fetchTransactions = cache(async (spaceId: string, from: string, to: string): Promise<RawTx[]> => {
+//
+// dateField permite à Visão Geral alternar para movement_date (data da
+// compra), espelhando o mesmo seletor que já existe em Transações.
+export type DashboardDateField = "movement" | "competence";
+
+export const fetchTransactions = cache(
+  async (spaceId: string, from: string, to: string, dateField: DashboardDateField = "competence"): Promise<RawTx[]> => {
   const supabase = await createClient();
   const [allRows, { accountIds: nonBrlAccountIds, cardIds: nonBrlCardIds }] = await Promise.all([
     fetchAllRows<RawTx & { account_id: string | null; card_id: string | null }>((pageFrom, pageTo) =>
@@ -92,8 +98,8 @@ export const fetchTransactions = cache(async (spaceId: string, from: string, to:
         )
         .eq("space_id", spaceId)
         .is("deleted_at", null)
-        .gte("competence_date", from)
-        .lte("competence_date", to)
+        .gte(dateField === "movement" ? "movement_date" : "competence_date", from)
+        .lte(dateField === "movement" ? "movement_date" : "competence_date", to)
         .order("id")
         .range(pageFrom, pageTo),
     ),
@@ -103,8 +109,9 @@ export const fetchTransactions = cache(async (spaceId: string, from: string, to:
   const rows = allRows.filter(
     (row) => !(row.account_id && nonBrlAccountIds.has(row.account_id)) && !(row.card_id && nonBrlCardIds.has(row.card_id)),
   );
-  return applyReimbursementAbatement(spaceId, rows);
-});
+    return applyReimbursementAbatement(spaceId, rows);
+  },
+);
 
 interface ReimbursementLink {
   id: string;
@@ -250,8 +257,8 @@ function toDashboardInput(tx: RawTx): DashboardTransactionInput {
   };
 }
 
-export async function getDashboardMetrics(spaceId: string, from: string, to: string): Promise<DashboardMetrics> {
-  const rows = await fetchTransactions(spaceId, from, to);
+export async function getDashboardMetrics(spaceId: string, from: string, to: string, dateField: DashboardDateField = "competence"): Promise<DashboardMetrics> {
+  const rows = await fetchTransactions(spaceId, from, to, dateField);
   return computeDashboardMetrics(rows.map(toDashboardInput));
 }
 
@@ -262,12 +269,12 @@ export interface MonthlyPoint {
   despesas: number;
 }
 
-export async function getMonthlySeries(spaceId: string, monthsBack = 6): Promise<MonthlyPoint[]> {
+export async function getMonthlySeries(spaceId: string, monthsBack = 6, dateField: DashboardDateField = "competence"): Promise<MonthlyPoint[]> {
   const now = new Date();
   const from = format(startOfMonth(subMonths(now, monthsBack - 1)), "yyyy-MM-dd");
   const to = format(now, "yyyy-MM-dd");
 
-  const rows = await fetchTransactions(spaceId, from, to);
+  const rows = await fetchTransactions(spaceId, from, to, dateField);
 
   const buckets = new Map<string, { receitas: number; despesas: number }>();
   for (let i = monthsBack - 1; i >= 0; i--) {
@@ -276,7 +283,7 @@ export async function getMonthlySeries(spaceId: string, monthsBack = 6): Promise
   }
 
   for (const row of rows) {
-    const key = row.competence_date.slice(0, 7);
+    const key = (dateField === "movement" ? row.movement_date : row.competence_date).slice(0, 7);
     const bucket = buckets.get(key);
     if (!bucket) continue;
 
@@ -352,27 +359,27 @@ function buildCategoryBreakdown(
     .sort((a, b) => b.amountCents - a.amountCents);
 }
 
-export async function getExpenseBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
-  const rows = await fetchTransactions(spaceId, from, to);
+export async function getExpenseBreakdown(spaceId: string, from: string, to: string, dateField: DashboardDateField = "competence"): Promise<CategoryBreakdownPoint[]> {
+  const rows = await fetchTransactions(spaceId, from, to, dateField);
   return buildCategoryBreakdown(rows, "saida", (nature) => nature === "despesa");
 }
 
-export async function getRevenueBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
-  const rows = await fetchTransactions(spaceId, from, to);
+export async function getRevenueBreakdown(spaceId: string, from: string, to: string, dateField: DashboardDateField = "competence"): Promise<CategoryBreakdownPoint[]> {
+  const rows = await fetchTransactions(spaceId, from, to, dateField);
   const revenueNatures = new Set<string>(REVENUE_NATURES);
   return buildCategoryBreakdown(rows, "entrada", (nature) => revenueNatures.has(nature));
 }
 
-export async function getInvestmentBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
-  const rows = await fetchTransactions(spaceId, from, to);
+export async function getInvestmentBreakdown(spaceId: string, from: string, to: string, dateField: DashboardDateField = "competence"): Promise<CategoryBreakdownPoint[]> {
+  const rows = await fetchTransactions(spaceId, from, to, dateField);
   return buildCategoryBreakdown(rows, "saida", (nature) => nature === "aplicacao_financeira");
 }
 
 // Gasto por tag: marcação transversal a categoria (ex.: "Viagem Tiradentes"
 // cobrindo hospedagem, restaurante, compras). Uma despesa pode ter mais de
 // uma tag — nesse caso entra no total de cada uma (não divide o valor).
-export async function getTagBreakdown(spaceId: string, from: string, to: string): Promise<CategoryBreakdownPoint[]> {
-  const [rows, tags] = await Promise.all([fetchTransactions(spaceId, from, to), listTags(spaceId)]);
+export async function getTagBreakdown(spaceId: string, from: string, to: string, dateField: DashboardDateField = "competence"): Promise<CategoryBreakdownPoint[]> {
+  const [rows, tags] = await Promise.all([fetchTransactions(spaceId, from, to, dateField), listTags(spaceId)]);
   const colorByTagName = new Map(tags.map((t) => [t.name, t.color]));
 
   const buckets = new Map<string, CategoryBreakdownPoint>();

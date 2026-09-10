@@ -13,10 +13,13 @@ import { PeriodFilter } from "./period-filter";
 export default async function VisaoGeralPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string }>;
+  searchParams: Promise<{ mes?: string; dataPor?: string }>;
 }) {
-  const { mes } = await searchParams;
+  const { mes, dataPor } = await searchParams;
   const space = await requireCurrentSpace();
+
+  // Padrão: competência (mês da fatura) — comportamento histórico dos painéis.
+  const dateField = dataPor === "compra" ? ("movement" as const) : ("competence" as const);
 
   const monthParam = mes ?? format(new Date(), "yyyy-MM");
   const [monthYear, monthNum] = monthParam.split("-").map(Number);
@@ -29,13 +32,13 @@ export default async function VisaoGeralPage({
   const prevTo = format(endOfMonth(prevMonth), "yyyy-MM-dd");
 
   const [metrics, prevMetrics, monthlySeries, expenseBreakdown, revenueBreakdown, investmentBreakdown, tagBreakdown] = await Promise.all([
-    getDashboardMetrics(space.id, from, to),
-    getDashboardMetrics(space.id, prevFrom, prevTo),
-    getMonthlySeries(space.id, 6),
-    getExpenseBreakdown(space.id, from, to),
-    getRevenueBreakdown(space.id, from, to),
-    getInvestmentBreakdown(space.id, from, to),
-    getTagBreakdown(space.id, from, to),
+    getDashboardMetrics(space.id, from, to, dateField),
+    getDashboardMetrics(space.id, prevFrom, prevTo, dateField),
+    getMonthlySeries(space.id, 6, dateField),
+    getExpenseBreakdown(space.id, from, to, dateField),
+    getRevenueBreakdown(space.id, from, to, dateField),
+    getInvestmentBreakdown(space.id, from, to, dateField),
+    getTagBreakdown(space.id, from, to, dateField),
   ]);
 
   function delta(current: number, previous: number): string | undefined {
