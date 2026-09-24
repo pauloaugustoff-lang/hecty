@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { normalizeDescription } from "@/lib/import/normalize";
 import { fetchAllRows, chunk } from "@/lib/supabase/fetch-all";
 import { classificationStatusFor } from "@/lib/domain/classification";
+import { formatCentsToBRL } from "@/lib/money/money";
 import { revalidateTransactionData } from "@/lib/revalidate-financial";
 import type { TransactionNature } from "@/lib/supabase/types";
 
@@ -81,12 +82,20 @@ export interface MarkTransferInput {
   transactionBId: string;
 }
 
+// Extratos reais chegam com diferenças de centavos entre as duas pernas de
+// uma mesma transferência (arredondamento do banco, resíduo de rendimento
+// creditado junto). Exigir igualdade exata obrigava a editar um valor que
+// veio do extrato só para o vínculo ser aceito — melhor tolerar uma diferença
+// pequena e registrá-la nas observações. Cada perna mantém o valor real, então
+// os saldos das contas continuam batendo com os extratos.
+const TRANSFER_AMOUNT_TOLERANCE_CENTS = 5;
+
 export async function markAsTransferAction(spaceId: string, input: MarkTransferInput): Promise<BulkActionState> {
   const supabase = await createClient();
 
   const { data: rows, error: fetchError } = await supabase
     .from("transactions")
-    .select("id, account_id, direction, amount_cents")
+    .select("id, account_id, direction, amount_cents, notes")
     .in("id", [input.transactionAId, input.transactionBId])
     .eq("space_id", spaceId);
 
@@ -95,21 +104,43 @@ export async function markAsTransferAction(spaceId: string, input: MarkTransferI
   }
 
   const [a, b] = rows;
-  const sameAmount = a.amount_cents === b.amount_cents;
+  const amountDiff = Math.abs(a.amount_cents - b.amount_cents);
+  const closeEnough = amountDiff <= TRANSFER_AMOUNT_TOLERANCE_CENTS;
   const oppositeDirection = a.direction !== b.direction;
   const differentAccounts = a.account_id && b.account_id && a.account_id !== b.account_id;
 
-  if (!sameAmount || !oppositeDirection || !differentAccounts) {
-    return { error: "Os dois lançamentos precisam ser de contas diferentes, mesmo valor e direções opostas." };
+  if (!closeEnough || !oppositeDirection || !differentAccounts) {
+    return {
+      error:
+        "Os dois lançamentos precisam ser de contas diferentes, direções opostas e valores iguais (tolerância de R$ 0,05).",
+    };
+  }
+
+  const diffNote =
+    amountDiff > 0 ? `Diferença de ${formatCentsToBRL(amountDiff)} entre as pernas da transferência.` : null;
+
+  function withDiffNote(notes: string | null): Record<string, string> {
+    if (!diffNote || (notes ?? "").includes(diffNote)) return {};
+    return { notes: notes?.trim() ? `${notes.trim()}\n${diffNote}` : diffNote };
   }
 
   const { error: updateErrorA } = await supabase
     .from("transactions")
-    .update({ nature: "transferencia_entre_contas", classification_status: "classificado", linked_transaction_id: b.id })
+    .update({
+      nature: "transferencia_entre_contas",
+      classification_status: "classificado",
+      linked_transaction_id: b.id,
+      ...withDiffNote(a.notes),
+    })
     .eq("id", a.id);
   const { error: updateErrorB } = await supabase
     .from("transactions")
-    .update({ nature: "transferencia_entre_contas", classification_status: "classificado", linked_transaction_id: a.id })
+    .update({
+      nature: "transferencia_entre_contas",
+      classification_status: "classificado",
+      linked_transaction_id: a.id,
+      ...withDiffNote(b.notes),
+    })
     .eq("id", b.id);
 
   if (updateErrorA || updateErrorB) {
