@@ -12,9 +12,11 @@ import {
   Legend,
   LineChart,
   Line,
+  ReferenceLine,
 } from "recharts";
 import { ChevronRight, ChevronsUpDown } from "lucide-react";
 import { formatCentsToBRL } from "@/lib/money/money";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import type { MonthlyPoint, CategoryBreakdownPoint, MonthlyCategorySeries } from "@/lib/data/dashboard";
 
 const gridColor = "var(--chart-grid)";
@@ -108,6 +110,12 @@ function StackedCategoryTooltip({
   );
 }
 
+// Mesmo teto do painel "por categoria": acima disso a pilha vira confete
+// ilegível — o excedente agrega em "Outras". Só vale pra visão empilhada;
+// no seletor de análise isolada TODAS as categorias aparecem.
+const MAX_STACKED_CATEGORIES = 7;
+const STACKED_OTHERS_ID = "__outras__";
+
 export function CategoryMonthlyChart({
   expenses,
   revenues,
@@ -116,72 +124,184 @@ export function CategoryMonthlyChart({
   revenues: MonthlyCategorySeries;
 }) {
   const [kind, setKind] = useState<"despesa" | "receita">("despesa");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const series = kind === "despesa" ? expenses : revenues;
 
-  // Recharts espera chaves planas por série, com zero explícito nos meses em
-  // que a categoria não aparece (undefined quebraria o empilhamento).
-  const data = series.points.map((point) => ({
-    label: point.label,
-    ...Object.fromEntries(series.categories.map((c) => [c.id, point.values[c.id] ?? 0])),
-  }));
+  function switchKind(next: "despesa" | "receita") {
+    setKind(next);
+    // As categorias de despesa não existem na série de receita (e vice-versa).
+    setSelectedId(null);
+  }
+
   const hasData = series.points.some((point) => Object.values(point.values).some((v) => v > 0));
-
-  return (
-    <div>
-      <div className="mb-3 inline-flex rounded-[var(--radius-md)] border border-border p-0.5">
-        {(
-          [
-            ["despesa", "Despesas"],
-            ["receita", "Receitas"],
-          ] as const
-        ).map(([value, text]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setKind(value)}
-            className={`rounded-[calc(var(--radius-md)-2px)] px-3 py-1 text-xs font-medium transition-colors ${
-              kind === value ? "bg-accent-soft text-accent" : "text-text-tertiary hover:text-text-secondary"
-            }`}
-          >
-            {text}
-          </button>
-        ))}
-      </div>
-
-      {hasData ? (
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={data}>
-            <CartesianGrid vertical={false} stroke={gridColor} />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: textColor, fontSize: 12 }} className="capitalize" />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tick={{ fill: textColor, fontSize: 11 }}
-              tickFormatter={(v) => formatCentsToBRL(v).replace(/ /g, " ")}
-              width={72}
-            />
-            <Tooltip content={<StackedCategoryTooltip />} cursor={{ fill: "var(--surface-sunken)" }} />
-            <Legend wrapperStyle={{ fontSize: 12, color: textColor }} />
-            {series.categories.map((category) => (
-              <Bar
-                key={category.id}
-                dataKey={category.id}
-                name={category.name}
-                stackId="meses"
-                fill={category.color}
-                // Respiro entre os segmentos da pilha, na cor do cartão.
-                stroke="var(--surface-raised)"
-                strokeWidth={1}
-                maxBarSize={56}
-              />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      ) : (
+  if (!hasData) {
+    return (
+      <div>
+        <KindToggle kind={kind} onChange={switchKind} />
         <p className="py-8 text-center text-sm text-text-tertiary">
           {kind === "despesa" ? "Nenhuma despesa classificada nos últimos meses." : "Nenhuma receita classificada nos últimos meses."}
         </p>
+      </div>
+    );
+  }
+
+  const selected = selectedId ? series.categories.find((c) => c.id === selectedId) ?? null : null;
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <KindToggle kind={kind} onChange={switchKind} />
+        <Select value={selectedId ?? "todas"} onValueChange={(v) => setSelectedId(v === "todas" ? null : v)}>
+          <SelectTrigger className="w-56" aria-label="Analisar uma categoria isoladamente">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas as categorias</SelectItem>
+            {series.categories.map((category) => (
+              <SelectItem key={category.id} value={category.id}>
+                <span className="flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 shrink-0 rounded-[2px]" style={{ backgroundColor: category.color }} />
+                  {category.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {selected ? (
+        <IsolatedCategoryChart series={series} category={selected} />
+      ) : (
+        <StackedCategoryChart series={series} onSelectCategory={setSelectedId} />
       )}
+    </div>
+  );
+}
+
+function KindToggle({ kind, onChange }: { kind: "despesa" | "receita"; onChange: (kind: "despesa" | "receita") => void }) {
+  return (
+    <div className="inline-flex rounded-[var(--radius-md)] border border-border p-0.5">
+      {(
+        [
+          ["despesa", "Despesas"],
+          ["receita", "Receitas"],
+        ] as const
+      ).map(([value, text]) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => onChange(value)}
+          className={`rounded-[calc(var(--radius-md)-2px)] px-3 py-1 text-xs font-medium transition-colors ${
+            kind === value ? "bg-accent-soft text-accent" : "text-text-tertiary hover:text-text-secondary"
+          }`}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function StackedCategoryChart({
+  series,
+  onSelectCategory,
+}: {
+  series: MonthlyCategorySeries;
+  onSelectCategory: (categoryId: string) => void;
+}) {
+  const visible = series.categories.slice(0, MAX_STACKED_CATEGORIES);
+  const folded = series.categories.slice(MAX_STACKED_CATEGORIES);
+  const foldedIds = new Set(folded.map((c) => c.id));
+  const stackCategories =
+    folded.length > 0 ? [...visible, { id: STACKED_OTHERS_ID, name: "Outras", color: "#94a3b8" }] : visible;
+
+  // Recharts espera chaves planas por série, com zero explícito nos meses em
+  // que a categoria não aparece (undefined quebraria o empilhamento).
+  const data = series.points.map((point) => {
+    const row: Record<string, number | string> = { label: point.label };
+    for (const category of stackCategories) row[category.id] = 0;
+    for (const [id, cents] of Object.entries(point.values)) {
+      const key = foldedIds.has(id) ? STACKED_OTHERS_ID : id;
+      row[key] = (row[key] as number) + cents;
+    }
+    return row;
+  });
+
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <BarChart data={data}>
+        <CartesianGrid vertical={false} stroke={gridColor} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: textColor, fontSize: 12 }} className="capitalize" />
+        <YAxis
+          tickLine={false}
+          axisLine={false}
+          tick={{ fill: textColor, fontSize: 11 }}
+          tickFormatter={(v) => formatCentsToBRL(v).replace(/ /g, " ")}
+          width={72}
+        />
+        <Tooltip content={<StackedCategoryTooltip />} cursor={{ fill: "var(--surface-sunken)" }} />
+        <Legend
+          wrapperStyle={{ fontSize: 12, color: textColor, cursor: "pointer" }}
+          // Clicar numa categoria da legenda também isola ("Outras" não é uma
+          // categoria real, então não isola).
+          onClick={(entry) => {
+            const id = String(entry.dataKey ?? "");
+            if (id && id !== STACKED_OTHERS_ID) onSelectCategory(id);
+          }}
+        />
+        {stackCategories.map((category) => (
+          <Bar
+            key={category.id}
+            dataKey={category.id}
+            name={category.name}
+            stackId="meses"
+            fill={category.color}
+            // Respiro entre os segmentos da pilha, na cor do cartão.
+            stroke="var(--surface-raised)"
+            strokeWidth={1}
+            maxBarSize={56}
+          />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function IsolatedCategoryChart({
+  series,
+  category,
+}: {
+  series: MonthlyCategorySeries;
+  category: { id: string; name: string; color: string };
+}) {
+  const data = series.points.map((point) => ({ label: point.label, valor: point.values[category.id] ?? 0 }));
+  const totalCents = data.reduce((sum, d) => sum + d.valor, 0);
+  const averageCents = data.length > 0 ? Math.round(totalCents / data.length) : 0;
+
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={data}>
+          <CartesianGrid vertical={false} stroke={gridColor} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: textColor, fontSize: 12 }} className="capitalize" />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            tick={{ fill: textColor, fontSize: 11 }}
+            tickFormatter={(v) => formatCentsToBRL(v).replace(/ /g, " ")}
+            width={72}
+          />
+          <Tooltip content={<CurrencyTooltip />} cursor={{ fill: "var(--surface-sunken)" }} />
+          <ReferenceLine y={averageCents} stroke="var(--border-strong)" strokeDasharray="4 4" />
+          <Bar dataKey="valor" name={category.name} fill={category.color} radius={[3, 3, 0, 0]} maxBarSize={56} />
+        </BarChart>
+      </ResponsiveContainer>
+      <p className="mt-2 text-[13px] text-text-secondary">
+        <span className="mr-1 inline-block h-2 w-2 rounded-[2px]" style={{ backgroundColor: category.color }} />
+        {category.name}: média de <span className="tabular font-medium text-text-primary">{formatCentsToBRL(averageCents)}</span>/mês
+        {" · "}total de <span className="tabular font-medium text-text-primary">{formatCentsToBRL(totalCents)}</span> no período
+        <span className="text-text-tertiary"> (linha tracejada = média)</span>
+      </p>
     </div>
   );
 }

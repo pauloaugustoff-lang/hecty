@@ -309,15 +309,15 @@ export interface MonthlyCategoryPoint {
 }
 
 export interface MonthlyCategorySeries {
-  /** Ordenadas pelo total do período, maiores primeiro; a última pode ser "Outras". */
+  /**
+   * TODAS as categorias do período, ordenadas pelo total (maiores primeiro).
+   * O agrupamento em "Outras" é responsabilidade da visualização: o gráfico
+   * empilhado dobra o excedente, mas a análise isolada precisa de qualquer
+   * categoria, inclusive as pequenas.
+   */
   categories: { id: string; name: string; color: string }[];
   points: MonthlyCategoryPoint[];
 }
-
-// Mesmo teto do painel "por categoria": acima disso as barras empilhadas
-// viram confete ilegível — o excedente agrega em "Outras".
-const MAX_STACKED_CATEGORIES = 7;
-const STACKED_OTHERS_ID = "__outras__";
 
 // Evolução mensal de cada categoria (barras empilhadas na Visão Geral).
 // kind decide o recorte: despesas (saída/despesa) ou receitas (entrada/
@@ -370,28 +370,15 @@ export async function getMonthlyCategorySeries(
     monthMap.set(id, (monthMap.get(id) ?? 0) + row.amount_cents);
   }
 
-  const ranked = Array.from(categoryInfo.entries()).sort((a, b) => b[1].totalCents - a[1].totalCents);
-  const visible = ranked.slice(0, MAX_STACKED_CATEGORIES);
-  const folded = new Set(ranked.slice(MAX_STACKED_CATEGORIES).map(([id]) => id));
+  const categories = Array.from(categoryInfo.entries())
+    .sort((a, b) => b[1].totalCents - a[1].totalCents)
+    .map(([id, info]) => ({ id, name: info.name, color: info.color }));
 
-  const categories = visible.map(([id, info]) => ({ id, name: info.name, color: info.color }));
-  if (folded.size > 0) {
-    categories.push({ id: STACKED_OTHERS_ID, name: "Outras", color: "#94a3b8" });
-  }
-
-  const points = monthKeys.map((month) => {
-    const monthMap = byMonth.get(month)!;
-    const values: Record<string, number> = {};
-    for (const [id, cents] of monthMap) {
-      const key = folded.has(id) ? STACKED_OTHERS_ID : id;
-      values[key] = (values[key] ?? 0) + cents;
-    }
-    return {
-      month,
-      label: format(new Date(`${month}-01T00:00:00`), "MMM", { locale: ptBR }),
-      values,
-    };
-  });
+  const points = monthKeys.map((month) => ({
+    month,
+    label: format(new Date(`${month}-01T00:00:00`), "MMM", { locale: ptBR }),
+    values: Object.fromEntries(byMonth.get(month)!),
+  }));
 
   return { categories, points };
 }
