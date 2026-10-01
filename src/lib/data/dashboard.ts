@@ -306,16 +306,25 @@ export interface MonthlyCategoryPoint {
   label: string;
   /** Total em centavos por categoryId (só as categorias presentes no mês). */
   values: Record<string, number>;
+  /** Total em centavos por subcategoryId (ids de categoria-filha, únicos entre si). */
+  subValues: Record<string, number>;
+}
+
+export interface MonthlyCategorySubcategory {
+  id: string;
+  name: string;
+  color: string;
 }
 
 export interface MonthlyCategorySeries {
   /**
-   * TODAS as categorias do período, ordenadas pelo total (maiores primeiro).
-   * O agrupamento em "Outras" é responsabilidade da visualização: o gráfico
+   * TODAS as categorias do período, ordenadas pelo total (maiores primeiro),
+   * cada uma com suas subcategorias (também ordenadas pelo total). O
+   * agrupamento em "Outras" é responsabilidade da visualização: o gráfico
    * empilhado dobra o excedente, mas a análise isolada precisa de qualquer
    * categoria, inclusive as pequenas.
    */
-  categories: { id: string; name: string; color: string }[];
+  categories: { id: string; name: string; color: string; subcategories: MonthlyCategorySubcategory[] }[];
   points: MonthlyCategoryPoint[];
 }
 
@@ -346,8 +355,12 @@ export async function getMonthlyCategorySeries(
   }
   const monthSet = new Set(monthKeys);
 
-  const categoryInfo = new Map<string, { name: string; color: string; totalCents: number }>();
+  const categoryInfo = new Map<
+    string,
+    { name: string; color: string; totalCents: number; subs: Map<string, { name: string; color: string; totalCents: number }> }
+  >();
   const byMonth = new Map<string, Map<string, number>>(monthKeys.map((m) => [m, new Map()]));
+  const subByMonth = new Map<string, Map<string, number>>(monthKeys.map((m) => [m, new Map()]));
 
   for (const row of rows) {
     if (!matches(row)) continue;
@@ -355,29 +368,54 @@ export async function getMonthlyCategorySeries(
     if (!monthSet.has(monthKey)) continue;
 
     const id = row.category_id ?? "sem-categoria";
-    const info = categoryInfo.get(id);
+    let info = categoryInfo.get(id);
     if (info) {
       info.totalCents += row.amount_cents;
     } else {
-      categoryInfo.set(id, {
+      info = {
         name: row.category?.name ?? "Sem categoria",
         color: row.category?.color ?? "#94a3b8",
         totalCents: row.amount_cents,
-      });
+        subs: new Map(),
+      };
+      categoryInfo.set(id, info);
     }
 
     const monthMap = byMonth.get(monthKey)!;
     monthMap.set(id, (monthMap.get(id) ?? 0) + row.amount_cents);
+
+    if (row.subcategory_id) {
+      const sub = info.subs.get(row.subcategory_id);
+      if (sub) {
+        sub.totalCents += row.amount_cents;
+      } else {
+        info.subs.set(row.subcategory_id, {
+          name: row.subcategory?.name ?? "Sem subcategoria",
+          color: row.subcategory?.color ?? info.color,
+          totalCents: row.amount_cents,
+        });
+      }
+      const subMonthMap = subByMonth.get(monthKey)!;
+      subMonthMap.set(row.subcategory_id, (subMonthMap.get(row.subcategory_id) ?? 0) + row.amount_cents);
+    }
   }
 
   const categories = Array.from(categoryInfo.entries())
     .sort((a, b) => b[1].totalCents - a[1].totalCents)
-    .map(([id, info]) => ({ id, name: info.name, color: info.color }));
+    .map(([id, info]) => ({
+      id,
+      name: info.name,
+      color: info.color,
+      subcategories: Array.from(info.subs.entries())
+        .sort((a, b) => b[1].totalCents - a[1].totalCents)
+        .map(([subId, sub]) => ({ id: subId, name: sub.name, color: sub.color })),
+    }));
 
   const points = monthKeys.map((month) => ({
     month,
     label: format(new Date(`${month}-01T00:00:00`), "MMM", { locale: ptBR }),
     values: Object.fromEntries(byMonth.get(month)!),
+    subValues: Object.fromEntries(subByMonth.get(month)!),
   }));
 
   return { categories, points };

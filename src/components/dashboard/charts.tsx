@@ -145,32 +145,64 @@ export function CategoryMonthlyChart({
     );
   }
 
-  const selected = selectedId ? series.categories.find((c) => c.id === selectedId) ?? null : null;
+  // Ids de categoria e subcategoria vêm todos da mesma tabela, então nunca
+  // colidem — a seleção resolve primeiro como categoria, depois como sub.
+  let isolated: { name: string; color: string; data: { label: string; valor: number }[] } | null = null;
+  if (selectedId) {
+    const category = series.categories.find((c) => c.id === selectedId);
+    if (category) {
+      isolated = {
+        name: category.name,
+        color: category.color,
+        data: series.points.map((p) => ({ label: p.label, valor: p.values[category.id] ?? 0 })),
+      };
+    } else {
+      for (const parent of series.categories) {
+        const sub = parent.subcategories.find((s) => s.id === selectedId);
+        if (sub) {
+          isolated = {
+            name: `${parent.name} › ${sub.name}`,
+            color: sub.color,
+            data: series.points.map((p) => ({ label: p.label, valor: p.subValues[sub.id] ?? 0 })),
+          };
+          break;
+        }
+      }
+    }
+  }
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <KindToggle kind={kind} onChange={switchKind} />
         <Select value={selectedId ?? "todas"} onValueChange={(v) => setSelectedId(v === "todas" ? null : v)}>
-          <SelectTrigger className="w-56" aria-label="Analisar uma categoria isoladamente">
+          <SelectTrigger className="w-64" aria-label="Analisar uma categoria ou subcategoria isoladamente">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todas">Todas as categorias</SelectItem>
-            {series.categories.map((category) => (
+            {series.categories.flatMap((category) => [
               <SelectItem key={category.id} value={category.id}>
                 <span className="flex items-center gap-2">
                   <span className="inline-block h-2 w-2 shrink-0 rounded-[2px]" style={{ backgroundColor: category.color }} />
                   {category.name}
                 </span>
-              </SelectItem>
-            ))}
+              </SelectItem>,
+              ...category.subcategories.map((sub) => (
+                <SelectItem key={sub.id} value={sub.id}>
+                  <span className="flex items-center gap-2 pl-4">
+                    <span className="inline-block h-2 w-2 shrink-0 rounded-[2px]" style={{ backgroundColor: sub.color }} />
+                    {sub.name}
+                  </span>
+                </SelectItem>
+              )),
+            ])}
           </SelectContent>
         </Select>
       </div>
 
-      {selected ? (
-        <IsolatedCategoryChart series={series} category={selected} />
+      {isolated ? (
+        <IsolatedCategoryChart name={isolated.name} color={isolated.color} data={isolated.data} />
       ) : (
         <StackedCategoryChart series={series} onSelectCategory={setSelectedId} />
       )}
@@ -268,13 +300,14 @@ function StackedCategoryChart({
 }
 
 function IsolatedCategoryChart({
-  series,
-  category,
+  name,
+  color,
+  data,
 }: {
-  series: MonthlyCategorySeries;
-  category: { id: string; name: string; color: string };
+  name: string;
+  color: string;
+  data: { label: string; valor: number }[];
 }) {
-  const data = series.points.map((point) => ({ label: point.label, valor: point.values[category.id] ?? 0 }));
   const totalCents = data.reduce((sum, d) => sum + d.valor, 0);
   const averageCents = data.length > 0 ? Math.round(totalCents / data.length) : 0;
 
@@ -293,12 +326,12 @@ function IsolatedCategoryChart({
           />
           <Tooltip content={<CurrencyTooltip />} cursor={{ fill: "var(--surface-sunken)" }} />
           <ReferenceLine y={averageCents} stroke="var(--border-strong)" strokeDasharray="4 4" />
-          <Bar dataKey="valor" name={category.name} fill={category.color} radius={[3, 3, 0, 0]} maxBarSize={56} />
+          <Bar dataKey="valor" name={name} fill={color} radius={[3, 3, 0, 0]} maxBarSize={56} />
         </BarChart>
       </ResponsiveContainer>
       <p className="mt-2 text-[13px] text-text-secondary">
-        <span className="mr-1 inline-block h-2 w-2 rounded-[2px]" style={{ backgroundColor: category.color }} />
-        {category.name}: média de <span className="tabular font-medium text-text-primary">{formatCentsToBRL(averageCents)}</span>/mês
+        <span className="mr-1 inline-block h-2 w-2 rounded-[2px]" style={{ backgroundColor: color }} />
+        {name}: média de <span className="tabular font-medium text-text-primary">{formatCentsToBRL(averageCents)}</span>/mês
         {" · "}total de <span className="tabular font-medium text-text-primary">{formatCentsToBRL(totalCents)}</span> no período
         <span className="text-text-tertiary"> (linha tracejada = média)</span>
       </p>
