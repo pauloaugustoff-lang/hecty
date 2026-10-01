@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import { ChevronRight, ChevronsUpDown } from "lucide-react";
 import { formatCentsToBRL } from "@/lib/money/money";
-import type { MonthlyPoint, CategoryBreakdownPoint } from "@/lib/data/dashboard";
+import type { MonthlyPoint, CategoryBreakdownPoint, MonthlyCategorySeries } from "@/lib/data/dashboard";
 
 const gridColor = "var(--chart-grid)";
 const textColor = "var(--text-tertiary)";
@@ -74,6 +74,115 @@ export function CashFlowChart({ data }: { data: MonthlyPoint[] }) {
         <Line type="monotone" dataKey="resultado" name="Resultado econômico" stroke="var(--chart-5)" strokeWidth={2} dot={{ r: 3 }} />
       </LineChart>
     </ResponsiveContainer>
+  );
+}
+
+// Tooltip da pilha mensal: só as categorias com valor no mês (uma pilha de
+// 8 categorias onde 5 estão zeradas naquele mês viraria ruído) + o total.
+function StackedCategoryTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { name: string; value: number; color: string }[];
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const nonZero = payload.filter((entry) => entry.value > 0);
+  if (nonZero.length === 0) return null;
+  const total = nonZero.reduce((sum, entry) => sum + entry.value, 0);
+  return (
+    <div className="rounded-[var(--radius-md)] border border-border bg-surface-overlay px-3 py-2 text-xs shadow-[var(--shadow-md)]">
+      {label ? <p className="mb-1 font-medium capitalize text-text-primary">{label}</p> : null}
+      {nonZero.map((entry) => (
+        <p key={entry.name} className="flex items-center gap-1.5 text-text-secondary">
+          <span className="inline-block h-2 w-2 shrink-0 rounded-[2px]" style={{ backgroundColor: entry.color }} />
+          {entry.name}: <span className="tabular text-text-primary">{formatCentsToBRL(entry.value)}</span>
+        </p>
+      ))}
+      <p className="mt-1 border-t border-border-subtle pt-1 font-medium text-text-primary">
+        Total: <span className="tabular">{formatCentsToBRL(total)}</span>
+      </p>
+    </div>
+  );
+}
+
+export function CategoryMonthlyChart({
+  expenses,
+  revenues,
+}: {
+  expenses: MonthlyCategorySeries;
+  revenues: MonthlyCategorySeries;
+}) {
+  const [kind, setKind] = useState<"despesa" | "receita">("despesa");
+  const series = kind === "despesa" ? expenses : revenues;
+
+  // Recharts espera chaves planas por série, com zero explícito nos meses em
+  // que a categoria não aparece (undefined quebraria o empilhamento).
+  const data = series.points.map((point) => ({
+    label: point.label,
+    ...Object.fromEntries(series.categories.map((c) => [c.id, point.values[c.id] ?? 0])),
+  }));
+  const hasData = series.points.some((point) => Object.values(point.values).some((v) => v > 0));
+
+  return (
+    <div>
+      <div className="mb-3 inline-flex rounded-[var(--radius-md)] border border-border p-0.5">
+        {(
+          [
+            ["despesa", "Despesas"],
+            ["receita", "Receitas"],
+          ] as const
+        ).map(([value, text]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setKind(value)}
+            className={`rounded-[calc(var(--radius-md)-2px)] px-3 py-1 text-xs font-medium transition-colors ${
+              kind === value ? "bg-accent-soft text-accent" : "text-text-tertiary hover:text-text-secondary"
+            }`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+
+      {hasData ? (
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={data}>
+            <CartesianGrid vertical={false} stroke={gridColor} />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: textColor, fontSize: 12 }} className="capitalize" />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: textColor, fontSize: 11 }}
+              tickFormatter={(v) => formatCentsToBRL(v).replace(/ /g, " ")}
+              width={72}
+            />
+            <Tooltip content={<StackedCategoryTooltip />} cursor={{ fill: "var(--surface-sunken)" }} />
+            <Legend wrapperStyle={{ fontSize: 12, color: textColor }} />
+            {series.categories.map((category) => (
+              <Bar
+                key={category.id}
+                dataKey={category.id}
+                name={category.name}
+                stackId="meses"
+                fill={category.color}
+                // Respiro entre os segmentos da pilha, na cor do cartão.
+                stroke="var(--surface-raised)"
+                strokeWidth={1}
+                maxBarSize={56}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      ) : (
+        <p className="py-8 text-center text-sm text-text-tertiary">
+          {kind === "despesa" ? "Nenhuma despesa classificada nos últimos meses." : "Nenhuma receita classificada nos últimos meses."}
+        </p>
+      )}
+    </div>
   );
 }
 

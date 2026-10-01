@@ -6,6 +6,7 @@ import { analyzeRedemption } from "@/lib/money/redemption";
 import { REVENUE_NATURES } from "@/lib/domain/labels";
 import { listTags } from "@/lib/data/tags";
 import { format, startOfMonth, subMonths } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 // Naturezas que abatem lançamentos vinculados: reembolso/estorno (entrada
 // abatendo despesas) e repasse (saída abatendo receitas — dinheiro que nunca
@@ -295,9 +296,104 @@ export async function getMonthlySeries(spaceId: string, monthsBack = 6, dateFiel
 
   return Array.from(buckets.entries()).map(([month, values]) => ({
     month,
-    label: format(new Date(`${month}-01T00:00:00`), "MMM"),
+    label: format(new Date(`${month}-01T00:00:00`), "MMM", { locale: ptBR }),
     ...values,
   }));
+}
+
+export interface MonthlyCategoryPoint {
+  month: string;
+  label: string;
+  /** Total em centavos por categoryId (só as categorias presentes no mês). */
+  values: Record<string, number>;
+}
+
+export interface MonthlyCategorySeries {
+  /** Ordenadas pelo total do período, maiores primeiro; a última pode ser "Outras". */
+  categories: { id: string; name: string; color: string }[];
+  points: MonthlyCategoryPoint[];
+}
+
+// Mesmo teto do painel "por categoria": acima disso as barras empilhadas
+// viram confete ilegível — o excedente agrega em "Outras".
+const MAX_STACKED_CATEGORIES = 7;
+const STACKED_OTHERS_ID = "__outras__";
+
+// Evolução mensal de cada categoria (barras empilhadas na Visão Geral).
+// kind decide o recorte: despesas (saída/despesa) ou receitas (entrada/
+// naturezas de receita) — as mesmas regras dos painéis de categoria do mês.
+export async function getMonthlyCategorySeries(
+  spaceId: string,
+  kind: "despesa" | "receita",
+  monthsBack = 6,
+  dateField: DashboardDateField = "competence",
+): Promise<MonthlyCategorySeries> {
+  const now = new Date();
+  const from = format(startOfMonth(subMonths(now, monthsBack - 1)), "yyyy-MM-dd");
+  const to = format(now, "yyyy-MM-dd");
+
+  const rows = await fetchTransactions(spaceId, from, to, dateField);
+
+  const revenueNatures = new Set<string>(REVENUE_NATURES);
+  const matches = (row: RawTx) =>
+    kind === "despesa"
+      ? row.direction === "saida" && row.nature === "despesa"
+      : row.direction === "entrada" && revenueNatures.has(row.nature);
+
+  const monthKeys: string[] = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    monthKeys.push(format(startOfMonth(subMonths(now, i)), "yyyy-MM"));
+  }
+  const monthSet = new Set(monthKeys);
+
+  const categoryInfo = new Map<string, { name: string; color: string; totalCents: number }>();
+  const byMonth = new Map<string, Map<string, number>>(monthKeys.map((m) => [m, new Map()]));
+
+  for (const row of rows) {
+    if (!matches(row)) continue;
+    const monthKey = (dateField === "movement" ? row.movement_date : row.competence_date).slice(0, 7);
+    if (!monthSet.has(monthKey)) continue;
+
+    const id = row.category_id ?? "sem-categoria";
+    const info = categoryInfo.get(id);
+    if (info) {
+      info.totalCents += row.amount_cents;
+    } else {
+      categoryInfo.set(id, {
+        name: row.category?.name ?? "Sem categoria",
+        color: row.category?.color ?? "#94a3b8",
+        totalCents: row.amount_cents,
+      });
+    }
+
+    const monthMap = byMonth.get(monthKey)!;
+    monthMap.set(id, (monthMap.get(id) ?? 0) + row.amount_cents);
+  }
+
+  const ranked = Array.from(categoryInfo.entries()).sort((a, b) => b[1].totalCents - a[1].totalCents);
+  const visible = ranked.slice(0, MAX_STACKED_CATEGORIES);
+  const folded = new Set(ranked.slice(MAX_STACKED_CATEGORIES).map(([id]) => id));
+
+  const categories = visible.map(([id, info]) => ({ id, name: info.name, color: info.color }));
+  if (folded.size > 0) {
+    categories.push({ id: STACKED_OTHERS_ID, name: "Outras", color: "#94a3b8" });
+  }
+
+  const points = monthKeys.map((month) => {
+    const monthMap = byMonth.get(month)!;
+    const values: Record<string, number> = {};
+    for (const [id, cents] of monthMap) {
+      const key = folded.has(id) ? STACKED_OTHERS_ID : id;
+      values[key] = (values[key] ?? 0) + cents;
+    }
+    return {
+      month,
+      label: format(new Date(`${month}-01T00:00:00`), "MMM", { locale: ptBR }),
+      values,
+    };
+  });
+
+  return { categories, points };
 }
 
 export interface SubcategoryBreakdownPoint {

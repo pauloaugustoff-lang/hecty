@@ -1,10 +1,10 @@
 import { Suspense } from "react";
 import { requireCurrentSpace } from "@/lib/spaces/current-space";
-import { getDashboardMetrics, getMonthlySeries, getExpenseBreakdown, getRevenueBreakdown, getInvestmentBreakdown, getTagBreakdown } from "@/lib/data/dashboard";
+import { getDashboardMetrics, getMonthlySeries, getMonthlyCategorySeries, getExpenseBreakdown, getRevenueBreakdown, getInvestmentBreakdown, getTagBreakdown } from "@/lib/data/dashboard";
 import { formatCentsToBRL } from "@/lib/money/money";
 import { PageHeader } from "@/components/layout/page-header";
 import { KpiBand, type KpiItem } from "@/components/dashboard/kpi-band";
-import { RevenueExpenseChart, CashFlowChart, CategoryBreakdownChart } from "@/components/dashboard/charts";
+import { RevenueExpenseChart, CashFlowChart, CategoryBreakdownChart, CategoryMonthlyChart } from "@/components/dashboard/charts";
 import { Callout } from "@/components/ui/callout";
 import { endOfMonth, format, startOfMonth, subMonths } from "date-fns";
 import Link from "next/link";
@@ -31,10 +31,12 @@ export default async function VisaoGeralPage({
   const prevFrom = format(startOfMonth(prevMonth), "yyyy-MM-dd");
   const prevTo = format(endOfMonth(prevMonth), "yyyy-MM-dd");
 
-  const [metrics, prevMetrics, monthlySeries, expenseBreakdown, revenueBreakdown, investmentBreakdown, tagBreakdown] = await Promise.all([
+  const [metrics, prevMetrics, monthlySeries, monthlyExpensesByCategory, monthlyRevenuesByCategory, expenseBreakdown, revenueBreakdown, investmentBreakdown, tagBreakdown] = await Promise.all([
     getDashboardMetrics(space.id, from, to, dateField),
     getDashboardMetrics(space.id, prevFrom, prevTo, dateField),
     getMonthlySeries(space.id, 6, dateField),
+    getMonthlyCategorySeries(space.id, "despesa", 6, dateField),
+    getMonthlyCategorySeries(space.id, "receita", 6, dateField),
     getExpenseBreakdown(space.id, from, to, dateField),
     getRevenueBreakdown(space.id, from, to, dateField),
     getInvestmentBreakdown(space.id, from, to, dateField),
@@ -125,6 +127,14 @@ export default async function VisaoGeralPage({
             <CategoryBreakdownChart data={tagBreakdown} emptyMessage="Nenhuma despesa marcada com tag no período." />
           </div>
         ) : null}
+
+        <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-6 lg:col-span-3">
+          <h2 className="mb-1 font-display text-base font-medium text-text-primary">Categorias mês a mês</h2>
+          <p className="mb-3 text-[13px] text-text-secondary">
+            Como cada categoria evoluiu nos últimos 6 meses — cada cor é uma categoria, cada barra é um mês.
+          </p>
+          <CategoryMonthlyChart expenses={monthlyExpensesByCategory} revenues={monthlyRevenuesByCategory} />
+        </div>
 
         <div className="rounded-[var(--radius-lg)] border border-border-subtle bg-surface-raised p-6 lg:col-span-3">
           <h2 className="mb-1 font-display text-base font-medium text-text-primary">Receitas efetivas vs. despesas</h2>
